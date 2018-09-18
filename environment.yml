@@ -1,26 +1,26 @@
-name: nn-env
+name: ba-project
 channels:
   - pytorch
   - defaults
 dependencies:
   - blas=1.0=mkl
-  - certifi=2018.8.24=py37_1
-  - cffi=1.11.5=py37h74b6da3_1
+  - certifi=2018.8.24=py36_1
+  - cffi=1.11.5=py36h74b6da3_1
   - icc_rt=2017.0.4=h97af966_0
   - intel-openmp=2019.0=117
   - mkl=2019.0=117
-  - mkl_fft=1.0.4=py37h1e22a9b_1
-  - mkl_random=1.0.1=py37h77b88f5_1
-  - numpy=1.15.1=py37ha559c80_0
-  - numpy-base=1.15.1=py37h8128ebf_0
-  - pip=10.0.1=py37_0
-  - pycparser=2.18=py37_1
-  - python=3.7.0=hea74fb7_0
-  - setuptools=40.2.0=py37_0
+  - mkl_fft=1.0.4=py36h1e22a9b_1
+  - mkl_random=1.0.1=py36h77b88f5_1
+  - numpy=1.15.1=py36ha559c80_0
+  - numpy-base=1.15.1=py36h8128ebf_0
+  - pip=10.0.1=py36_0
+  - pycparser=2.18=py36_1
+  - python=3.6.6=hea74fb7_0
+  - setuptools=40.2.0=py36_0
   - vc=14=h0510ff6_3
   - vs2015_runtime=14.0.25123=3
-  - wheel=0.31.1=py37_0
-  - wincertstore=0.2=py37_0
-  - pytorch-cpu=0.4.1=py37_cpuhe774522_1
-prefix: C:\Users\paulh\Anaconda3\envs\nn-env
+  - wheel=0.31.1=py36_0
+  - wincertstore=0.2=py36h7fe50ca_0
+  - pytorch-cpu=0.4.1=py36_cpuhe774522_1
+prefix: C:\Users\paulh\Anaconda3\envs\ba-project
 
