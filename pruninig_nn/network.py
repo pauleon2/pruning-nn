@@ -38,15 +38,13 @@ class PruningLayer(nn.Module):
 
         self.mask = torch.ones(param.size())
 
-    def get_weights(self):
-        param = self.find_weight_in_params()
-        return self.mask * param
-
     def get_mask(self):
         return self.mask
 
     def set_mask(self, mask):
         self.mask = mask
+        param = nn.Parameter(self.find_weight_in_params() * self.mask, True)
+        self.wrapped.register_parameter('weight', param)
 
     def find_weight_in_params(self):
         for (name, param) in self.wrapped.named_parameters():
@@ -54,6 +52,4 @@ class PruningLayer(nn.Module):
                 return param
 
     def forward(self, x):
-        #  param = nn.Parameter(self.find_weight_in_params() * self.mask, True)
-        #  self.register_parameter('weight', param)
         return self.wrapped.forward(x)

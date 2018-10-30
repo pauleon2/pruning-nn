@@ -1,3 +1,7 @@
+from pruninig_nn.network import PruningLayer
+import random
+
+
 class PruneNeuralNetStrategy:
     """
     Strategy pattern for the selection of the currently used pruning strategy.
@@ -17,7 +21,7 @@ class PruneNeuralNetStrategy:
         else:
             self.prune = random_pruning
 
-    def prune(self, network, percentage=0.1):
+    def prune(self, network, percentage):
         """
         :param: network: The network that should be pruned.
         :param: percentage: The percentage of weights that should be pruned.
@@ -27,4 +31,26 @@ class PruneNeuralNetStrategy:
 
 
 def random_pruning(network, percentage):
-    pass
+    for child in get_single_pruning_layer(network):
+        mask = child.get_mask()
+        total = child.find_weight_in_params().size()[0] * child.find_weight_in_params().size()[1]
+        prune_goal = percentage * total
+        print('Total parameters {}, to be pruned {}'
+              .format(total, prune_goal))
+        prune_done = 0
+
+        while prune_done < prune_goal:
+            x = random.randint(0, child.find_weight_in_params().size()[0] - 1)
+            y = random.randint(0, child.find_weight_in_params().size()[1] - 1)
+            if mask[x][y] == 1:
+                mask[x][y] = 0
+                prune_done += 1
+            else:
+                continue
+        child.set_mask(mask)
+
+
+def get_single_pruning_layer(network):
+    for child in network.children():
+        if type(child) == PruningLayer:
+            yield child
