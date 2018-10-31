@@ -31,25 +31,14 @@ class PruningLayer(nn.Module):
     def __init__(self, wrapped):
         super().__init__()
         self.wrapped = wrapped
-
-        param = self.find_weight_in_params()
-        if param is None:
-            raise ValueError('Wrapped module must contain weights')
-
-        self.mask = torch.ones(param.size())
+        self.mask = torch.ones(self.wrapped.weight.size())
 
     def get_mask(self):
         return self.mask
 
     def set_mask(self, mask):
         self.mask = mask
-        param = nn.Parameter(self.find_weight_in_params() * self.mask, True)
-        self.wrapped.register_parameter('weight', param)
-
-    def find_weight_in_params(self):
-        for (name, param) in self.wrapped.named_parameters():
-            if name == 'weight':
-                return param
 
     def forward(self, x):
+        self.wrapped.weight.data = self.wrapped.weight.data * self.mask
         return self.wrapped.forward(x)

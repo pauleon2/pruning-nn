@@ -7,7 +7,6 @@ class PruneNeuralNetStrategy:
     Strategy pattern for the selection of the currently used pruning strategy.
     Strategies can be set during creation of the strategy object.
     """
-
     def __init__(self, strategy=None):
         """
         Creates a new PruneNeuralNetStrategy object. There are a number of pruning strategies supported currently there
@@ -33,15 +32,15 @@ class PruneNeuralNetStrategy:
 def random_pruning(network, percentage):
     for child in get_single_pruning_layer(network):
         mask = child.get_mask()
-        total = child.find_weight_in_params().size()[0] * child.find_weight_in_params().size()[1]
+        total = mask.sum()  # All parameters that are non zero can be pruned
         prune_goal = percentage * total
         print('Total parameters {}, to be pruned {}'
               .format(total, prune_goal))
         prune_done = 0
 
         while prune_done < prune_goal:
-            x = random.randint(0, child.find_weight_in_params().size()[0] - 1)
-            y = random.randint(0, child.find_weight_in_params().size()[1] - 1)
+            x = random.randint(0, child.wrapped.weight.size()[0] - 1)
+            y = random.randint(0, child.wrapped.weight.size()[1] - 1)
             if mask[x][y] == 1:
                 mask[x][y] = 0
                 prune_done += 1

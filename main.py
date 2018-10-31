@@ -3,12 +3,15 @@ import torchvision
 import torch.nn as nn
 import torchvision.transforms as transforms
 from pruninig_nn.network import NeuralNetwork
+from pruninig_nn.pruning import PruneNeuralNetStrategy
+from pruninig_nn.util import train, test
 
+# constant variables
 hyper_params = {
-    'pruning_percentage': 90.,  # percentage of weights pruned
+    'pruning_percentage': 0.5,  # percentage of weights pruned
     'batch_size': 64,
     'test_batch_size': 100,
-    'num_epochs': 10,
+    'num_epochs': 2,
     'learning_rate': 0.001,
     'momentum': 0,
     'hidden_units': 100
@@ -43,46 +46,25 @@ test_loader = torch.utils.data.DataLoader(test_dataset,
 model = NeuralNetwork(28 * 28, hyper_params['hidden_units'], 10)
 
 # Criterion and optimizer
-criterion = nn.NLLLoss()  # TODO: actually use MSE Error
+# might actually use MSE Error
+criterion = nn.NLLLoss()
 optimizer = torch.optim.SGD(model.parameters(),
                             lr=hyper_params['learning_rate'],
                             momentum=hyper_params['momentum'])
 
-total_step = len(train_loader)
+# train and test the network
 for epoch in range(hyper_params['num_epochs']):
-    model.train()
-    for i, (images, labels) in enumerate(train_loader):
-        images = images.reshape(-1, 28 * 28)
+    train(train_loader, model, optimizer, criterion, epoch, hyper_params['num_epochs'])
+    test(test_loader, model)
 
-        optimizer.zero_grad()
+# prune using strategy
+strategy = PruneNeuralNetStrategy()
+strategy.prune(model, hyper_params['pruning_percentage'])
 
-        outputs = model(images)
-        loss = criterion(outputs, labels)
+# Reevaluate the network performance
+test(test_loader, model)
 
-        loss.backward()
-        optimizer.step()
-
-        if (i + 1) % 100 == 0:
-            print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'
-                  .format(epoch + 1, hyper_params['num_epochs'], i + 1, total_step, loss.item()))
-
-    with torch.no_grad():
-        correct = 0
-        total = 0
-        for test_images, test_labels in test_loader:
-            test_images = test_images.reshape(-1, 28 * 28)
-            outputs = model(test_images)
-            _, predicted = torch.max(outputs.data, 1)
-            total += test_labels.size(0)
-            correct += (predicted == test_labels).sum().item()
-
-        print('Accuracy of the network on the {} test images: {:.4f} %'
-              .format(total, 100 * correct / total))
-
-# TODO: do pruning process here
-
-# TODO: reevaluate test accuracy
-
-# TODO: do retraining
-
-# TODO: reevaluate test accuracy
+# Retrain and reevaluate
+for epoch in range(2):
+    train(train_loader, model, optimizer, criterion, epoch, 2)
+    test(test_loader, model)
