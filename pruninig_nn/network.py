@@ -9,6 +9,7 @@ class NeuralNetwork(nn.Module):
     Currently activation function: ReLU
     Output function: Log-Softmax
     """
+
     def __init__(self, input_size, hidden_size, num_classes):
         super(NeuralNetwork, self).__init__()
         self.fc1 = PruningLayer(nn.Linear(input_size, hidden_size))
@@ -28,6 +29,7 @@ class PruningLayer(nn.Module):
     Pruning Layer is a Decorator for all nn.Modules with a named parameter `weight`.
     The parameter 'weight' will be changed by calling the prune method.
     """
+
     def __init__(self, wrapped):
         super().__init__()
         self.wrapped = wrapped
