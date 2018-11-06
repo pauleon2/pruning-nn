@@ -12,7 +12,8 @@ from pruninig_nn.util import train, test
 
 # constant variables
 hyper_params = {
-    'pruning_percentage': 0.2,  # percentage of weights pruned
+    'pruning_percentage': 0.7,  # percentage of weights pruned
+    'pruning_update_rate': 0.05,
     'batch_size': 64,
     'test_batch_size': 100,
     'num_epochs': 20,
@@ -66,15 +67,18 @@ for epoch in range(hyper_params['num_epochs']):
 torch.save(model, './model/model.pt')
 print('Saved pretrained model')
 
-sns.set()
+# setup variables for pruning
 current_pruning_rate = hyper_params['pruning_percentage']
-
 s = pd.DataFrame(columns=['epoch', 'accuracy', 'pruning_perc'])
-while current_pruning_rate < 0.9:
+
+while current_pruning_rate <= 0.9:
     # loading the model
+    print('loading pre-trained model for pruning with pruning percentage of {:.4f} %'
+          .format(current_pruning_rate * 100))
     loaded_model = torch.load('./model/model.pt')
     loaded_model.train()
 
+    # loss and optimizer for the loaded model
     criterion_loaded = nn.NLLLoss()
     optimizer_loaded = torch.optim.SGD(loaded_model.parameters(),
                                        lr=hyper_params['learning_rate'],
@@ -84,7 +88,9 @@ while current_pruning_rate < 0.9:
     strategy = PruneNeuralNetStrategy()
     strategy.prune(loaded_model, current_pruning_rate)
 
+    # setup data frame for results
     accuracy = np.zeros(hyper_params['num_retrain_epochs'] + 1)
+
     # Reevaluate the network performance
     accuracy[0] = test(test_loader, loaded_model)
 
@@ -93,16 +99,20 @@ while current_pruning_rate < 0.9:
         train(train_loader, loaded_model, optimizer_loaded, criterion_loaded, epoch, hyper_params['num_retrain_epochs'])
         accuracy[epoch + 1] = test(test_loader, loaded_model)
 
+    # accumulate data
     tmp = pd.DataFrame({'epoch': range(0, hyper_params['num_retrain_epochs'] + 1),
                         'accuracy': accuracy,
                         'pruning_perc': np.full(hyper_params['num_retrain_epochs'] + 1, current_pruning_rate)})
     s = s.append(tmp, ignore_index=True)
 
     # update current pruning rate
-    current_pruning_rate = current_pruning_rate + hyper_params['pruning_percentage']
+    current_pruning_rate = current_pruning_rate + hyper_params['pruning_update_rate']
 
-plot = sns.relplot(x='epoch', y='accuracy', hue="pruning_perc",
-                   dashes=False, markers=True,
-                   kind="line", data=s)
+# plot the results
+sns.set()
+sns.set_context("paper")
+
+plot = sns.relplot(x='epoch', y='accuracy', hue='pruning_perc', legend='full',
+                   kind="line", data=s, linewidth=4)
 
 plt.show()
