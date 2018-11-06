@@ -2,17 +2,21 @@ import torch
 import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
+import seaborn as sns
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from pruninig_nn.network import NeuralNetwork
-from pruninig_nn.pruning import PruneNeuralNetStrategy, weight_based_pruning
+from pruninig_nn.pruning import PruneNeuralNetStrategy
 from pruninig_nn.util import train, test
 
 # constant variables
 hyper_params = {
-    'pruning_percentage': 0.5,  # percentage of weights pruned
+    'pruning_percentage': 0.2,  # percentage of weights pruned
     'batch_size': 64,
     'test_batch_size': 100,
-    'num_epochs': 10,
-    'num_retrain_epochs': 5,
+    'num_epochs': 20,
+    'num_retrain_epochs': 10,
     'learning_rate': 0.001,
     'momentum': 0,
     'hidden_units': 100
@@ -58,14 +62,47 @@ for epoch in range(hyper_params['num_epochs']):
     train(train_loader, model, optimizer, criterion, epoch, hyper_params['num_epochs'])
     test(test_loader, model)
 
-# prune using strategy
-strategy = PruneNeuralNetStrategy(weight_based_pruning)
-strategy.prune(model, hyper_params['pruning_percentage'])
+# save the current model
+torch.save(model, './model/model.pt')
+print('Saved pretrained model')
 
-# Reevaluate the network performance
-test(test_loader, model)
+sns.set()
+current_pruning_rate = hyper_params['pruning_percentage']
 
-# Retrain and reevaluate
-for epoch in range(hyper_params['num_retrain_epochs']):
-    train(train_loader, model, optimizer, criterion, epoch, hyper_params['num_retrain_epochs'])
-    test(test_loader, model)
+s = pd.DataFrame(columns=['epoch', 'accuracy', 'pruning_perc'])
+while current_pruning_rate < 0.9:
+    # loading the model
+    loaded_model = torch.load('./model/model.pt')
+    loaded_model.train()
+
+    criterion_loaded = nn.NLLLoss()
+    optimizer_loaded = torch.optim.SGD(loaded_model.parameters(),
+                                       lr=hyper_params['learning_rate'],
+                                       momentum=hyper_params['momentum'])
+
+    # prune using strategy
+    strategy = PruneNeuralNetStrategy()
+    strategy.prune(loaded_model, current_pruning_rate)
+
+    accuracy = np.zeros(hyper_params['num_retrain_epochs'] + 1)
+    # Reevaluate the network performance
+    accuracy[0] = test(test_loader, loaded_model)
+
+    # Retrain and reevaluate
+    for epoch in range(hyper_params['num_retrain_epochs']):
+        train(train_loader, loaded_model, optimizer_loaded, criterion_loaded, epoch, hyper_params['num_retrain_epochs'])
+        accuracy[epoch + 1] = test(test_loader, loaded_model)
+
+    tmp = pd.DataFrame({'epoch': range(0, hyper_params['num_retrain_epochs'] + 1),
+                        'accuracy': accuracy,
+                        'pruning_perc': np.full(hyper_params['num_retrain_epochs'] + 1, current_pruning_rate)})
+    s = s.append(tmp, ignore_index=True)
+
+    # update current pruning rate
+    current_pruning_rate = current_pruning_rate + hyper_params['pruning_percentage']
+
+plot = sns.relplot(x='epoch', y='accuracy', hue="pruning_perc",
+                   dashes=False, markers=True,
+                   kind="line", data=s)
+
+plt.show()

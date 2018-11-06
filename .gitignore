@@ -107,4 +107,7 @@ venv.bak/
 
 # pycharm
 .idea/
+
+# my work
 data/
+model/
