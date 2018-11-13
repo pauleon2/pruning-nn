@@ -20,8 +20,7 @@ class NeuralNetwork(nn.Module):
     def forward(self, x):
         out = self.fc1(x)
         out = self.relu(out)
-        out = self.fc2(out)
-        return self.log_softmax(out, dim=1)
+        return self.fc2(out)
 
 
 class PruningLayer(nn.Module):

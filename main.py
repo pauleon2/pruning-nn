@@ -16,9 +16,9 @@ hyper_params = {
     'pruning_update_rate': 0.05,
     'batch_size': 64,
     'test_batch_size': 100,
-    'num_epochs': 20,
     'num_retrain_epochs': 10,
-    'learning_rate': 0.001,
+    'num_epochs': 10,
+    'learning_rate': 0.01,
     'momentum': 0,
     'hidden_units': 100
 }
@@ -53,7 +53,7 @@ model = NeuralNetwork(28 * 28, hyper_params['hidden_units'], 10)
 
 # Criterion and optimizer
 # might actually use MSE Error
-criterion = nn.NLLLoss()
+criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(),
                             lr=hyper_params['learning_rate'],
                             momentum=hyper_params['momentum'])
