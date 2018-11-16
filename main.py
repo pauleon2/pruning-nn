@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pruninig_nn.network import NeuralNetwork
-from pruninig_nn.pruning import PruneNeuralNetStrategy
+from pruninig_nn.pruning import PruneNeuralNetStrategy, obd_pruning
 from pruninig_nn.util import train, test
 
 # constant variables
@@ -79,14 +79,25 @@ while current_pruning_rate <= 0.9:
     loaded_model.train()
 
     # loss and optimizer for the loaded model
-    criterion_loaded = nn.NLLLoss()
+    criterion_loaded = nn.CrossEntropyLoss()
     optimizer_loaded = torch.optim.SGD(loaded_model.parameters(),
                                        lr=hyper_params['learning_rate'],
                                        momentum=hyper_params['momentum'])
 
     # prune using strategy
-    strategy = PruneNeuralNetStrategy()
-    strategy.prune(loaded_model, current_pruning_rate)
+    strategy = PruneNeuralNetStrategy(obd_pruning)
+
+    loss = None
+    if strategy.requires_loss():
+        train_loader_second_order = torch.utils.data.DataLoader(train_dataset,
+                                                                batch_size=train_dataset.__len__())
+
+        for (images, labels) in train_loader_second_order:
+            images = images.reshape(-1, 28 * 28)
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+
+    strategy.prune(loaded_model, current_pruning_rate, loss=loss)
 
     # setup data frame for results
     accuracy = np.zeros(hyper_params['num_retrain_epochs'] + 1)

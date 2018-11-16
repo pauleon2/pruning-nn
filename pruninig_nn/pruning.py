@@ -19,17 +19,68 @@ class PruneNeuralNetStrategy:
                             executed
         """
         if strategy:
-            self.prune = strategy
+            self.prune_strategy = strategy
         else:
-            self.prune = random_pruning
+            self.prune_strategy = random_pruning
 
-    def prune(self, network, percentage):
+    def prune(self, network, percentage, loss=None):
+        if self.requires_loss():
+            self.prune_strategy(network, percentage, loss)
+        else:
+            self.prune_strategy(network, percentage)
+
+    def requires_loss(self):
         """
-        :param: network: The network that should be pruned.
-        :param: percentage: The percentage of weights that should be pruned.
-        :return: The pruned network
+        Check if the current pruning method needs retraining
+        :return: If a gradient of the network is required.
         """
-        self.prune(network, percentage)
+        return not (self.prune_strategy == random_pruning or self.prune_strategy == weight_based_pruning)
+
+
+#
+# Top-Down Pruning Approaches
+#
+
+
+def obd_pruning(network, percentage, loss):
+    """
+    Implementation of the optimal brain damage algorithm.
+    Requires the gradient to be set in the network.
+
+    :param network: The network where the calculations should be done.
+    :param percentage: The percentage of weights that should be pruned.
+    """
+    params = network.parameters()
+    grads = torch.autograd.grad(loss, params, create_graph=True)  # First order derivative
+
+    for layer in get_single_pruning_layer(network):
+        # step1: compute diagonal of hessian matrix
+        hessian_diagonal = torch.Tensor(layer.wrapped.weight)  # TODO this step
+
+        # step2: take weight matrix and square it
+        weight_squared = torch.Tensor(layer.wrapped.weight ^ 2)
+
+        # step3: multiply weight matrix with diagonal matrix
+        # step4: divide by two
+        saliency = (hessian_diagonal * weight_squared) * 0.5
+
+        # make similar to weight based pruning
+
+
+def obs_pruning(network, percentage, loss):
+    """
+    Implementation of the optimal brain surgeon algorithm.
+    Requires the graidient to be set.
+
+    :param network: The network that should be pruned
+    :param percentage: The percentage of weights that should be pruned
+    """
+    pass
+
+
+#
+# Network based pruning methods
+#
 
 
 def random_pruning(network, percentage):
@@ -70,6 +121,11 @@ def weight_based_pruning(network, percentage):
     for layer in get_single_pruning_layer(network):
         layer.set_mask(torch.ge(layer.wrapped.weight.data.abs(), threshold).float())
         # todo: second pruning run should only be allowed to prune not yet pruned values
+
+
+#
+# UTIL METHODS
+#
 
 
 def find_threshold(layers, percentage):
