@@ -15,7 +15,6 @@ class NeuralNetwork(nn.Module):
         self.fc1 = PruningLayer(nn.Linear(input_size, hidden_size))
         self.relu = nn.ReLU()
         self.fc2 = PruningLayer(nn.Linear(hidden_size, num_classes))
-        self.log_softmax = F.log_softmax
 
     def forward(self, x):
         out = self.fc1(x)

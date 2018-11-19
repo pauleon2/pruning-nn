@@ -12,8 +12,8 @@ from pruninig_nn.util import train, test
 
 # constant variables
 hyper_params = {
-    'pruning_percentage': 0.7,  # percentage of weights pruned
-    'pruning_update_rate': 0.05,
+    'pruning_percentage': 90,  # percentage of weights pruned
+    'pruning_update_rate': 5,
     'batch_size': 64,
     'test_batch_size': 100,
     'num_retrain_epochs': 10,
@@ -34,96 +34,102 @@ train_dataset = torchvision.datasets.MNIST(root='./data',
                                            transform=transform,
                                            download=True)
 
-train_loader = torch.utils.data.DataLoader(train_dataset,
-                                           batch_size=hyper_params['batch_size'],
-                                           shuffle=True)
-
 # load test dataset
 test_dataset = torchvision.datasets.MNIST(root='./data',
                                           train=False,
                                           transform=transform,
                                           download=True)
 
+train_loader = torch.utils.data.DataLoader(train_dataset,
+                                           batch_size=hyper_params['batch_size'],
+                                           shuffle=True)
+
 test_loader = torch.utils.data.DataLoader(test_dataset,
                                           batch_size=hyper_params['test_batch_size'],
                                           shuffle=True)
 
-# create neural net and train (input is image, output is number between 0 and 9.
-model = NeuralNetwork(28 * 28, hyper_params['hidden_units'], 10)
 
-# Criterion and optimizer
-# might actually use MSE Error
-criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(model.parameters(),
-                            lr=hyper_params['learning_rate'],
-                            momentum=hyper_params['momentum'])
+def train_network():
+    # create neural net and train (input is image, output is number between 0 and 9.
+    model = NeuralNetwork(28 * 28, hyper_params['hidden_units'], 10)
 
-# train and test the network
-for epoch in range(hyper_params['num_epochs']):
-    train(train_loader, model, optimizer, criterion, epoch, hyper_params['num_epochs'])
-    test(test_loader, model)
+    # Criterion and optimizer
+    # might actually use MSE Error
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.SGD(model.parameters(),
+                                lr=hyper_params['learning_rate'],
+                                momentum=hyper_params['momentum'])
 
-# save the current model
-torch.save(model, './model/model.pt')
-print('Saved pretrained model')
+    # train and test the network
+    for epoch in range(hyper_params['num_epochs']):
+        train(train_loader, model, optimizer, criterion, epoch, hyper_params['num_epochs'])
+        test(test_loader, model)
 
-# setup variables for pruning
-current_pruning_rate = hyper_params['pruning_percentage']
-s = pd.DataFrame(columns=['epoch', 'accuracy', 'pruning_perc'])
+    # save the current model
+    torch.save(model, './model/model.pt')
+    print('Saved pretrained model')
 
-while current_pruning_rate <= 0.9:
-    # loading the model
-    print('loading pre-trained model for pruning with pruning percentage of {:.4f} %'
-          .format(current_pruning_rate * 100))
-    loaded_model = torch.load('./model/model.pt')
-    loaded_model.train()
 
-    # loss and optimizer for the loaded model
-    criterion_loaded = nn.CrossEntropyLoss()
-    optimizer_loaded = torch.optim.SGD(loaded_model.parameters(),
-                                       lr=hyper_params['learning_rate'],
-                                       momentum=hyper_params['momentum'])
+def prune_network():
+    # setup variables for pruning
+    current_pruning_rate = hyper_params['pruning_percentage']
+    s = pd.DataFrame(columns=['epoch', 'accuracy', 'pruning_perc'])
 
-    # prune using strategy
-    strategy = PruneNeuralNetStrategy(obd_pruning)
+    while current_pruning_rate <= 90:
+        # loading the model
+        print('loading pre-trained model for pruning with pruning percentage of {:.4f} %'
+              .format(current_pruning_rate))
+        model = torch.load('./model/model.pt')
+        model.train()
 
-    loss = None
-    if strategy.requires_loss():
-        train_loader_second_order = torch.utils.data.DataLoader(train_dataset,
-                                                                batch_size=train_dataset.__len__())
+        # loss and optimizer for the loaded model
+        criterion = nn.CrossEntropyLoss()
+        optimizer = torch.optim.SGD(model.parameters(),
+                                    lr=hyper_params['learning_rate'],
+                                    momentum=hyper_params['momentum'])
 
-        for (images, labels) in train_loader_second_order:
-            images = images.reshape(-1, 28 * 28)
-            outputs = model(images)
-            loss = criterion(outputs, labels)
+        # prune using strategy
+        strategy = PruneNeuralNetStrategy()
 
-    strategy.prune(loaded_model, current_pruning_rate, loss=loss)
+        loss = None
+        if strategy.requires_loss():
+            train_loader_second_order = torch.utils.data.DataLoader(train_dataset,
+                                                                    batch_size=train_dataset.__len__())
 
-    # setup data frame for results
-    accuracy = np.zeros(hyper_params['num_retrain_epochs'] + 1)
+            for (images, labels) in train_loader_second_order:
+                images = images.reshape(-1, 28 * 28)
+                outputs = model(images)
+                loss = criterion(outputs, labels)
 
-    # Reevaluate the network performance
-    accuracy[0] = test(test_loader, loaded_model)
+        strategy.prune(model, current_pruning_rate, loss=loss)
 
-    # Retrain and reevaluate
-    for epoch in range(hyper_params['num_retrain_epochs']):
-        train(train_loader, loaded_model, optimizer_loaded, criterion_loaded, epoch, hyper_params['num_retrain_epochs'])
-        accuracy[epoch + 1] = test(test_loader, loaded_model)
+        # setup data frame for results
+        accuracy = np.zeros(hyper_params['num_retrain_epochs'] + 1)
 
-    # accumulate data
-    tmp = pd.DataFrame({'epoch': range(0, hyper_params['num_retrain_epochs'] + 1),
-                        'accuracy': accuracy,
-                        'pruning_perc': np.full(hyper_params['num_retrain_epochs'] + 1, current_pruning_rate)})
-    s = s.append(tmp, ignore_index=True)
+        # Reevaluate the network performance
+        accuracy[0] = test(test_loader, model)
 
-    # update current pruning rate
-    current_pruning_rate = current_pruning_rate + hyper_params['pruning_update_rate']
+        # Retrain and reevaluate
+        for epoch in range(hyper_params['num_retrain_epochs']):
+            train(train_loader, model, optimizer, criterion, epoch,
+                  hyper_params['num_retrain_epochs'])
+            accuracy[epoch + 1] = test(test_loader, model)
 
-# plot the results
-sns.set()
-sns.set_context("paper")
+        # accumulate data
+        tmp = pd.DataFrame({'epoch': range(hyper_params['num_retrain_epochs'] + 1),
+                            'accuracy': accuracy,
+                            'pruning_perc': np.full(hyper_params['num_retrain_epochs'] + 1, current_pruning_rate / 100)})
+        s = s.append(tmp, ignore_index=True)
 
-plot = sns.relplot(x='epoch', y='accuracy', hue='pruning_perc', legend='full',
-                   kind="line", data=s, linewidth=4)
+        # update current pruning rate
+        current_pruning_rate = current_pruning_rate + hyper_params['pruning_update_rate']
 
-plt.show()
+    # plot the results
+    sns.set()
+    sns.set_context("talk")
+    plot = sns.relplot(x='epoch', y='accuracy', hue='pruning_perc', legend='full',
+                       kind="line", data=s)
+    plt.show()
+
+
+prune_network()

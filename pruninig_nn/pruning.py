@@ -49,6 +49,7 @@ def obd_pruning(network, percentage, loss):
 
     :param network: The network where the calculations should be done.
     :param percentage: The percentage of weights that should be pruned.
+    :param loss: The loss of the network on the trainings set. Needs to have grad enabled.
     """
     params = network.parameters()
     grads = torch.autograd.grad(loss, params, create_graph=True)  # First order derivative
@@ -93,7 +94,7 @@ def random_pruning(network, percentage):
     for child in get_single_pruning_layer(network):
         mask = child.get_mask()
         total = mask.sum()  # All parameters that are non zero can be pruned
-        prune_goal = percentage * total
+        prune_goal = (percentage * total) / 100
         print('Total parameters {}, to be pruned {}'
               .format(total, prune_goal))
         prune_done = 0
@@ -140,7 +141,7 @@ def find_threshold(layers, percentage):
     for layer in layers:
         # todo only add to all weights if weight is not masked yet.
         all_weights += list(filter(lambda x: x, layer.wrapped.weight.data.abs().numpy().flatten()))
-    return np.percentile(np.array(all_weights), percentage * 100)
+    return np.percentile(np.array(all_weights), percentage)
 
 
 def get_single_pruning_layer(network):
