@@ -27,7 +27,7 @@ def train(train_loader, model, optimizer, criterion, epoch, total_epochs):
     """
     Train the model on the train dataset with a loss function and and optimization algorithm.
     :param train_loader: The training dataset.
-    :param model: The to be trained model
+    :param model: The to be trained model.
     :param optimizer: The used optimizer.
     :param criterion: The loss function.
     :param epoch: The current epoch.

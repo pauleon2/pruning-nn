@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pruninig_nn.network import NeuralNetwork
-from pruninig_nn.pruning import PruneNeuralNetStrategy, obd_pruning
+from pruninig_nn.pruning import PruneNeuralNetStrategy
 from pruninig_nn.util import train, test
 
 # constant variables

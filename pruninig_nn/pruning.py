@@ -8,6 +8,20 @@ class PruneNeuralNetStrategy:
     """
     Strategy pattern for the selection of the currently used pruning strategy.
     Strategies can be set during creation of the strategy object.
+    Valid Strategies are:
+
+    <ul>
+        <li>Random Pruning</li>
+        <li>Magnitude Based Pruning</li>
+        <li>Optimal Brain Damage</li>
+        <li>Optimal Brain Surgeon</li>
+        <li>Layerwise Optimal Brain Surgeon</li>
+        <li>Net Trim</li>
+    </ul>
+
+    All methods except of the random pruning and magnitude based pruning require the loss argument. In order to
+    calculate the weight saliency in a top-down approach.
+    If no Strategy is specified random pruning will be used as a fallback.
     """
 
     def __init__(self, strategy=None):
@@ -16,7 +30,7 @@ class PruneNeuralNetStrategy:
         is random pruning only.
 
         :param strategy:    The selected strategy for pruning If no pruning strategy is provided random pruning will be
-                            executed
+                            selected as the standard pruning method.
         """
         if strategy:
             self.prune_strategy = strategy
@@ -31,10 +45,10 @@ class PruneNeuralNetStrategy:
 
     def requires_loss(self):
         """
-        Check if the current pruning method needs retraining
+        Check if the current pruning method needs the network's loss as an argument.
         :return: If a gradient of the network is required.
         """
-        return not (self.prune_strategy == random_pruning or self.prune_strategy == weight_based_pruning)
+        return not (self.prune_strategy == random_pruning or self.prune_strategy == magnitude_based_pruning)
 
 
 #
@@ -118,7 +132,7 @@ def random_pruning(network, percentage):
         child.set_mask(mask)
 
 
-def weight_based_pruning(network, percentage):
+def magnitude_based_pruning(network, percentage):
     """
     Implementation of weight based pruning. In each step the percentage of not yet pruned weights will be eliminated
     starting with the smallest element in the network.

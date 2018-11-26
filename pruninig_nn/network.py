@@ -1,13 +1,12 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class NeuralNetwork(nn.Module):
     """
-    Standard feed-forward neural network with one hidden layer.
-    Currently activation function: ReLU
-    Output function: Log-Softmax
+    Feed-forward neural network with one hidden layer. The single layers are Prunable linear layers. In these single
+    neorons or weights can be deleted and will therefore not be usable any more.
+    Activation function: ReLU
     """
 
     def __init__(self, input_size, hidden_size, num_classes):
@@ -25,12 +24,15 @@ class NeuralNetwork(nn.Module):
 class PruningLayer(nn.Module):
     """
     Pruning Layer is a Decorator for all nn.Modules with a named parameter `weight`.
-    The parameter 'weight' will be changed by calling the prune method.
+    The parameter 'weight' will be changed by calling the prune method. During the forwarding of data through the
+    network the pruning matrix will be multiplied to the weights. This leads to a pruned layer since the weights for
+    which the matrix holds a zero will be eliminated in the backproporgation algorithm.
     """
 
     def __init__(self, wrapped):
         super().__init__()
         self.wrapped = wrapped
+        # create a mask of ones for all weights (no element pruned at beginning)
         self.mask = torch.ones(self.wrapped.weight.size())
 
     def get_mask(self):
