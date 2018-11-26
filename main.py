@@ -13,7 +13,7 @@ from pruninig_nn.util import train, test
 # constant variables
 hyper_params = {
     'pruning_percentage': 90,  # percentage of weights pruned
-    'pruning_update_rate': 5,
+    'pruning_update_rate': 2,
     'batch_size': 64,
     'test_batch_size': 100,
     'num_retrain_epochs': 10,
@@ -49,7 +49,11 @@ test_loader = torch.utils.data.DataLoader(test_dataset,
                                           shuffle=True)
 
 
-def train_network():
+def setup():
+    pass
+
+
+def train_network(filename='model.pt'):
     # create neural net and train (input is image, output is number between 0 and 9.
     model = NeuralNetwork(28 * 28, hyper_params['hidden_units'], 10)
 
@@ -66,8 +70,8 @@ def train_network():
         test(test_loader, model)
 
     # save the current model
-    torch.save(model, './model/model.pt')
-    print('Saved pretrained model')
+    torch.save(model, './model/' + filename)
+    print('Saved pretrained model to ./model/' + filename)
 
 
 def prune_network():
@@ -75,7 +79,7 @@ def prune_network():
     current_pruning_rate = hyper_params['pruning_percentage']
     s = pd.DataFrame(columns=['epoch', 'accuracy', 'pruning_perc'])
 
-    while current_pruning_rate <= 90:
+    while current_pruning_rate <= 100:
         # loading the model
         print('loading pre-trained model for pruning with pruning percentage of {:.4f} %'
               .format(current_pruning_rate))
@@ -93,6 +97,7 @@ def prune_network():
 
         loss = None
         if strategy.requires_loss():
+            print('Calculate network loss for 2nd order derivative')
             train_loader_second_order = torch.utils.data.DataLoader(train_dataset,
                                                                     batch_size=train_dataset.__len__())
 
@@ -128,8 +133,10 @@ def prune_network():
     sns.set()
     sns.set_context("talk")
     plot = sns.relplot(x='epoch', y='accuracy', hue='pruning_perc', legend='full',
-                       kind="line", data=s)
-    plt.show()
+                       kind="line", data=s, linewidth=2)
+    plt.show(plot)
 
 
+# train_network()
+# info: saved network's performance: 96.05 %
 prune_network()

@@ -79,6 +79,14 @@ def obs_pruning(network, percentage, loss):
     pass
 
 
+def layer_wise_obs_pruning(network, percentage, loss):
+    pass
+
+
+def net_trim_pruning(network, percentage, loss):
+    pass
+
+
 #
 # Network based pruning methods
 #
