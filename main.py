@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pruninig_nn.network import NeuralNetwork
-from pruninig_nn.pruning import PruneNeuralNetStrategy
+from pruninig_nn.pruning import PruneNeuralNetStrategy, magnitude_based_pruning
 from pruninig_nn.util import train, test
 
 # constant variables
@@ -74,7 +74,7 @@ def train_network(filename='model.pt'):
     print('Saved pretrained model to ./model/' + filename)
 
 
-def prune_network():
+def prune_network(prune_strategy=None):
     # setup variables for pruning
     current_pruning_rate = hyper_params['pruning_percentage']
     s = pd.DataFrame(columns=['epoch', 'accuracy', 'pruning_perc'])
@@ -93,7 +93,7 @@ def prune_network():
                                     momentum=hyper_params['momentum'])
 
         # prune using strategy
-        strategy = PruneNeuralNetStrategy()
+        strategy = PruneNeuralNetStrategy(prune_strategy)
 
         loss = None
         if strategy.requires_loss():
@@ -139,4 +139,4 @@ def prune_network():
 
 # train_network()
 # info: saved network's performance: 96.05 %
-prune_network()
+prune_network(magnitude_based_pruning)

@@ -142,8 +142,9 @@ def magnitude_based_pruning(network, percentage):
     layers = get_single_pruning_layer(network)
     threshold = find_threshold(layers=layers, percentage=percentage)
     for layer in get_single_pruning_layer(network):
+        # All deleted weights should be set to zero so they should definetly be less than the threshold since this is
+        # positive.
         layer.set_mask(torch.ge(layer.wrapped.weight.data.abs(), threshold).float())
-        # todo: second pruning run should only be allowed to prune not yet pruned values
 
 
 #
@@ -154,15 +155,23 @@ def magnitude_based_pruning(network, percentage):
 def find_threshold(layers, percentage):
     """
     Find a threshold for a percentage so that the percentage number of values are below the threshold and the rest
-    above.
+    above. The threshold is always a positive number since this method uses only the absolute numbers of the weight
+    magnitudes.
     :param layers: The layers of the network.
     :param percentage: The percentage of weights that should be pruned.
     :return: The calculated threshold.
     """
     all_weights = []
     for layer in layers:
-        # todo only add to all weights if weight is not masked yet.
-        all_weights += list(filter(lambda x: x, layer.wrapped.weight.data.abs().numpy().flatten()))
+        # flatten both weights and mask
+        mask = list(layer.get_mask().abs().numpy().flatten())
+        weights = list(layer.wrapped.weight.data.abs().numpy().flatten())  # TODO: check if these two are determinsitic
+
+        # zip, filter, unzip the two lists
+        mask, filtered_weights = zip(
+            *((masked_val, weight_val) for masked_val, weight_val in zip(mask, weights) if masked_val == 1))
+        all_weights += filtered_weights
+
     return np.percentile(np.array(all_weights), percentage)
 
 
