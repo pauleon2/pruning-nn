@@ -82,8 +82,8 @@ def train_network(filename='model.pt'):
 
 def prune_network(prune_strategy=None, filename='model.pt'):
     # setup stuff for result graphs
-    # sns.set()
-    # sns.set_context("talk")
+    sns.set()
+    sns.set_context("talk")
 
     # setup variables for pruning
     current_pruning_rate = hyper_params['pruning_percentage']
@@ -137,25 +137,20 @@ def prune_network(prune_strategy=None, filename='model.pt'):
                                                         current_pruning_rate / 100)})
             s = s.append(tmp, ignore_index=True)
         else:
-            # todo
             pass
 
+        # update current pruning rate
         current_pruning_rate = current_pruning_rate + hyper_params['pruning_update_rate']
 
-        # all_weights = []
-        # for layer in get_single_pruning_layer(model):
-        #     all_weights += layer.get_masked_weight()
-        # plot = sns.distplot(np.array(all_weights))
-        # plt.show(plot)
-
-        # update current pruning rate
         # plot the results
         # plot = sns.relplot(x='epoch', y='accuracy', hue='pruning_perc', legend='full',
         #                   kind="line", data=s, linewidth=2)
+
         # show the final graph
+        plt.show()
 
 
-# info: saved network's performance: 96.26 %
+# info: saved network's performance: 96.44 %
 setup()
 train_network()
 prune_network(magnitude_based_pruning)
