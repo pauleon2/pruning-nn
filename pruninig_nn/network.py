@@ -41,6 +41,20 @@ class PruningLayer(nn.Module):
     def set_mask(self, mask):
         self.mask = mask
 
+    def get_masked_weight(self):
+        mask = list(self.mask.abs().numpy().flatten())
+        weights = list(self.wrapped.weight.data.numpy().flatten())
+
+        masked_val, filtered_weights = zip(
+            *((masked_val, weight_val) for masked_val, weight_val in zip(mask, weights) if masked_val == 1))
+        return list(filtered_weights)
+
     def forward(self, x):
         self.wrapped.weight.data = self.wrapped.weight.data * self.mask
         return self.wrapped.forward(x)
+
+
+def get_single_pruning_layer(network):
+    for child in network.children():
+        if type(child) == PruningLayer:
+            yield child

@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torchvision
@@ -6,8 +7,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from pruninig_nn.network import NeuralNetwork
-from pruninig_nn.pruning import PruneNeuralNetStrategy, magnitude_based_pruning
+from pruninig_nn.network import NeuralNetwork, get_single_pruning_layer
+from pruninig_nn.pruning import PruneNeuralNetStrategy, magnitude_based_pruning, random_pruning, obd_pruning
 from pruninig_nn.util import train, test
 
 # constant variables
@@ -50,7 +51,12 @@ test_loader = torch.utils.data.DataLoader(test_dataset,
 
 
 def setup():
-    pass
+    if not os.path.exists('./model'):
+        os.mkdir('./model')
+        print('Created directory for model')
+    if not os.path.exists('./results'):
+        os.mkdir('./results')
+        print('Created directory for results')
 
 
 def train_network(filename='model.pt'):
@@ -74,7 +80,11 @@ def train_network(filename='model.pt'):
     print('Saved pretrained model to ./model/' + filename)
 
 
-def prune_network(prune_strategy=None):
+def prune_network(prune_strategy=None, filename='model.pt'):
+    # setup stuff for result graphs
+    # sns.set()
+    # sns.set_context("talk")
+
     # setup variables for pruning
     current_pruning_rate = hyper_params['pruning_percentage']
     s = pd.DataFrame(columns=['epoch', 'accuracy', 'pruning_perc'])
@@ -83,7 +93,7 @@ def prune_network(prune_strategy=None):
         # loading the model
         print('loading pre-trained model for pruning with pruning percentage of {:.4f} %'
               .format(current_pruning_rate))
-        model = torch.load('./model/model.pt')
+        model = torch.load('./model/' + filename)
         model.train()
 
         # loss and optimizer for the loaded model
@@ -108,35 +118,44 @@ def prune_network(prune_strategy=None):
 
         strategy.prune(model, current_pruning_rate, loss=loss)
 
-        # setup data frame for results
-        accuracy = np.zeros(hyper_params['num_retrain_epochs'] + 1)
-
-        # Reevaluate the network performance
-        accuracy[0] = test(test_loader, model)
-
         # Retrain and reevaluate
-        for epoch in range(hyper_params['num_retrain_epochs']):
-            train(train_loader, model, optimizer, criterion, epoch,
-                  hyper_params['num_retrain_epochs'])
-            accuracy[epoch + 1] = test(test_loader, model)
+        if strategy.require_retraining():
+            # setup data frame for results
+            accuracy = np.zeros(hyper_params['num_retrain_epochs'] + 1)
 
-        # accumulate data
-        tmp = pd.DataFrame({'epoch': range(hyper_params['num_retrain_epochs'] + 1),
-                            'accuracy': accuracy,
-                            'pruning_perc': np.full(hyper_params['num_retrain_epochs'] + 1, current_pruning_rate / 100)})
-        s = s.append(tmp, ignore_index=True)
+            # Reevaluate the network performance
+            accuracy[0] = test(test_loader, model)
+            for epoch in range(hyper_params['num_retrain_epochs']):
+                train(train_loader, model, optimizer, criterion, epoch,
+                      hyper_params['num_retrain_epochs'])
+                accuracy[epoch + 1] = test(test_loader, model)
 
-        # update current pruning rate
+            # accumulate data
+            tmp = pd.DataFrame({'epoch': range(hyper_params['num_retrain_epochs'] + 1),
+                                'accuracy': accuracy,
+                                'pruning_perc': np.full(hyper_params['num_retrain_epochs'] + 1,
+                                                        current_pruning_rate / 100)})
+            s = s.append(tmp, ignore_index=True)
+        else:
+            # todo
+            pass
+
         current_pruning_rate = current_pruning_rate + hyper_params['pruning_update_rate']
 
-    # plot the results
-    sns.set()
-    sns.set_context("talk")
-    plot = sns.relplot(x='epoch', y='accuracy', hue='pruning_perc', legend='full',
-                       kind="line", data=s, linewidth=2)
-    plt.show(plot)
+        # all_weights = []
+        # for layer in get_single_pruning_layer(model):
+        #     all_weights += layer.get_masked_weight()
+        # plot = sns.distplot(np.array(all_weights))
+        # plt.show(plot)
+
+        # update current pruning rate
+        # plot the results
+        # plot = sns.relplot(x='epoch', y='accuracy', hue='pruning_perc', legend='full',
+        #                   kind="line", data=s, linewidth=2)
+        # show the final graph
 
 
-# train_network()
-# info: saved network's performance: 96.05 %
+# info: saved network's performance: 96.26 %
+setup()
+train_network()
 prune_network(magnitude_based_pruning)

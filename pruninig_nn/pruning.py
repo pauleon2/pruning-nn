@@ -1,7 +1,7 @@
-from pruninig_nn.network import PruningLayer
 import numpy as np
 import random
 import torch
+from pruninig_nn.network import get_single_pruning_layer
 
 
 class PruneNeuralNetStrategy:
@@ -15,8 +15,8 @@ class PruneNeuralNetStrategy:
         <li>Magnitude Based Pruning</li>
         <li>Optimal Brain Damage</li>
         <li>Optimal Brain Surgeon</li>
-        <li>Layerwise Optimal Brain Surgeon</li>
-        <li>Net Trim</li>
+        <li>Net-Trim</li>
+        <li>Layer-wise Optimal Brain Surgeon</li>
     </ul>
 
     All methods except of the random pruning and magnitude based pruning require the loss argument. In order to
@@ -50,6 +50,13 @@ class PruneNeuralNetStrategy:
         """
         return not (self.prune_strategy == random_pruning or self.prune_strategy == magnitude_based_pruning)
 
+    def require_retraining(self):
+        """
+        Check if the current pruning strategy requires a retraining after the pruning is done
+        :return: If the retraining is required.
+        """
+        return self.prune_strategy in [random_pruning, magnitude_based_pruning, obd_pruning]
+
 
 #
 # Top-Down Pruning Approaches
@@ -69,17 +76,17 @@ def obd_pruning(network, percentage, loss):
     grads = torch.autograd.grad(loss, params, create_graph=True)  # First order derivative
 
     for layer in get_single_pruning_layer(network):
-        # step1: compute diagonal of hessian matrix
-        hessian_diagonal = torch.Tensor(layer.wrapped.weight)  # TODO this step
+        # todo step1: compute diagonal of hessian matrix
+        hessian_diagonal = torch.Tensor(layer.wrapped.weight)
 
         # step2: take weight matrix and square it
-        weight_squared = torch.Tensor(layer.wrapped.weight ^ 2)
+        weight_squared = torch.Tensor(layer.wrapped.weight ** 2)
 
         # step3: multiply weight matrix with diagonal matrix
-        # step4: divide by two
+        # step4: divide by two can probably be skipped since it is a linear factor that does not effect the overall per.
         saliency = (hessian_diagonal * weight_squared) * 0.5
 
-        # make similar to weight based pruning
+        # todo: make similar to magnitude based pruning
 
 
 def obs_pruning(network, percentage, loss):
@@ -122,8 +129,11 @@ def random_pruning(network, percentage):
         prune_done = 0
 
         while prune_done < prune_goal:
+            # select random input and output node
             x = random.randint(0, child.wrapped.weight.size()[0] - 1)
             y = random.randint(0, child.wrapped.weight.size()[1] - 1)
+
+            # if selected weight is still already pruned do nothing else prune this weight
             if mask[x][y] == 1:
                 mask[x][y] = 0
                 prune_done += 1
@@ -173,9 +183,3 @@ def find_threshold(layers, percentage):
         all_weights += filtered_weights
 
     return np.percentile(np.array(all_weights), percentage)
-
-
-def get_single_pruning_layer(network):
-    for child in network.children():
-        if type(child) == PruningLayer:
-            yield child
