@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from torch.nn.parameter import Parameter
 import torch.nn.functional as F
 import pandas as pd
 
@@ -26,7 +25,7 @@ class NeuralNetwork(nn.Module):
 
 
 class MaskedLinearLayer(nn.Linear):
-    def __init__(self, in_feature, out_features, bias=False):
+    def __init__(self, in_feature, out_features, bias=True):
         super().__init__(in_feature, out_features, bias)
         # create a mask of ones for all weights (no element pruned at beginning)
         self.mask = Variable(torch.ones(self.weight.size()))
@@ -59,8 +58,8 @@ def get_single_pruning_layer(network):
 def get_weight_distribution(network):
     all_weights = []
     for layer in get_single_pruning_layer(network):
-        mask = list(network.get_mask().abs().numpy().flatten())
-        weights = list(network.get_weight().data.numpy().flatten())
+        mask = list(layer.get_mask().numpy().flatten())
+        weights = list(layer.get_weight().data.numpy().flatten())
 
         masked_val, filtered_weights = zip(
             *((masked_val, weight_val) for masked_val, weight_val in zip(mask, weights) if masked_val == 1))
