@@ -130,8 +130,8 @@ def random_pruning(network, percentage):
 
         while prune_done < prune_goal:
             # select random input and output node
-            x = random.randint(0, child.wrapped.weight.size()[0] - 1)
-            y = random.randint(0, child.wrapped.weight.size()[1] - 1)
+            x = random.randint(0, child.get_weight().size()[0] - 1)
+            y = random.randint(0, child.get_weight().size()[1] - 1)
 
             # if selected weight is still already pruned do nothing else prune this weight
             if mask[x][y] == 1:
@@ -154,7 +154,7 @@ def magnitude_based_pruning(network, percentage):
     for layer in get_single_pruning_layer(network):
         # All deleted weights should be set to zero so they should definetly be less than the threshold since this is
         # positive.
-        layer.set_mask(torch.ge(layer.wrapped.weight.data.abs(), threshold).float())
+        layer.set_mask(torch.ge(layer.get_weight().data.abs(), threshold).float())
 
 
 #
@@ -175,7 +175,7 @@ def find_threshold(layers, percentage):
     for layer in layers:
         # flatten both weights and mask
         mask = list(layer.get_mask().abs().numpy().flatten())
-        weights = list(layer.wrapped.weight.data.abs().numpy().flatten())  # TODO: check if these two are determinsitic
+        weights = list(layer.get_weight().data.abs().numpy().flatten())
 
         # zip, filter, unzip the two lists
         mask, filtered_weights = zip(
