@@ -2,7 +2,7 @@ import numpy as np
 import random
 import torch
 from torch.autograd import grad
-from pruninig_nn.network import get_single_pruning_layer
+from pruning_nn.network import get_single_pruning_layer
 
 
 class PruneNeuralNetStrategy:
