@@ -1,6 +1,7 @@
 import numpy as np
 import random
 import torch
+from torch.autograd import grad
 from pruninig_nn.network import get_single_pruning_layer
 
 
@@ -72,15 +73,26 @@ def obd_pruning(network, percentage, loss):
     :param percentage: The percentage of weights that should be pruned.
     :param loss: The loss of the network on the trainings set. Needs to have grad enabled.
     """
-    params = network.parameters()
-    grads = torch.autograd.grad(loss, params, create_graph=True)  # First order derivative
+    # instead of using loss.backward(), use torch.autograd.grad() to compute 1st order gradients
+    loss_grads = grad(loss, network.parameters(), create_graph=True)
 
+    # iterate over all parameter groups from the network
+    all_grads = []
+    for param, grd in zip(network.parameters(), loss_grads):
+        # iterate over single entries of a parameter form the network
+        zipped = zip(grd.view(-1), param.view(-1))
+        for num, (g, p) in enumerate(zipped):
+            drv = grad(g, param, retain_graph=True)
+            for tensor in drv:
+                print(p, g, tensor.view(-1)[num].item())
+
+    # Okay todo this later!!!
     for layer in get_single_pruning_layer(network):
         # todo step1: compute diagonal of hessian matrix
-        hessian_diagonal = torch.Tensor(layer.wrapped.weight)
+        hessian_diagonal = torch.Tensor(layer.get_weight())
 
         # step2: take weight matrix and square it
-        weight_squared = torch.Tensor(layer.wrapped.weight ** 2)
+        weight_squared = torch.Tensor(layer.get_weight() ** 2)
 
         # step3: multiply weight matrix with diagonal matrix
         # step4: divide by two can probably be skipped since it is a linear factor that does not effect the overall per.
