@@ -74,31 +74,35 @@ def obd_pruning(network, percentage, loss):
     :param loss: The loss of the network on the trainings set. Needs to have grad enabled.
     """
     # instead of using loss.backward(), use torch.autograd.grad() to compute 1st order gradients
+    print('Start calculating first order derivative')
     loss_grads = grad(loss, network.parameters(), create_graph=True)
+    print('Finished calculating first order derivative')
 
     # iterate over all parameter groups from the network
-    all_grads = []
-    for param, grd in zip(network.parameters(), loss_grads):
-        # iterate over single entries of a parameter form the network
-        zipped = zip(grd.view(-1), param.view(-1))
-        for num, (g, p) in enumerate(zipped):
-            drv = grad(g, param, retain_graph=True)
-            for tensor in drv:
-                print(p, g, tensor.view(-1)[num].item())
+    for grd, layer in zip(loss_grads, get_single_pruning_layer(network)):
+        print('Start calculating second order derivative for layer')
+        all_grads = torch.ones(layer.get_weight().view(-1).size())
 
-    # Okay todo this later!!!
+        for num, g in enumerate(grd.view(-1)):
+            drv = grad(g, layer.get_weight(), retain_graph=True)
+            all_grads[num] = drv[0].view(-1)[num]
+            if (num + 1) % 100 == 0:
+                print('Calculated 100 derivatives. Going on...')
+
+        print('Finished calculating second order derivative for layer')
+
+        with torch.no_grad:
+            layer.grad = all_grads.view(layer.get_weight().size()) * layer.get_weight().data.pow(2) * 0.5
+
+    # calculate threshold for pruning
+    layers = get_single_pruning_layer(network)
+    threshold = find_threshold(layers=layers, percentage=percentage)
+
+    # update mask
     for layer in get_single_pruning_layer(network):
-        # todo step1: compute diagonal of hessian matrix
-        hessian_diagonal = torch.Tensor(layer.get_weight())
-
-        # step2: take weight matrix and square it
-        weight_squared = torch.Tensor(layer.get_weight() ** 2)
-
-        # step3: multiply weight matrix with diagonal matrix
-        # step4: divide by two can probably be skipped since it is a linear factor that does not effect the overall per.
-        saliency = (hessian_diagonal * weight_squared) * 0.5
-
-        # todo: make similar to magnitude based pruning
+        # All deleted weights should be set to zero so they should definetly be less than the threshold since this is
+        # positive.
+        layer.set_mask(torch.ge(layer.get_weight().data.abs(), threshold).float())
 
 
 def obs_pruning(network, percentage, loss):
@@ -183,15 +187,17 @@ def find_threshold(layers, percentage):
     :param percentage: The percentage of weights that should be pruned.
     :return: The calculated threshold.
     """
-    all_weights = []
+    all_sal = []
     for layer in layers:
         # flatten both weights and mask
         mask = list(layer.get_mask().abs().numpy().flatten())
-        weights = list(layer.get_weight().data.abs().numpy().flatten())
+        saliency = list(layer.get_saliency().numpy().flatten())
 
         # zip, filter, unzip the two lists
-        mask, filtered_weights = zip(
-            *((masked_val, weight_val) for masked_val, weight_val in zip(mask, weights) if masked_val == 1))
-        all_weights += filtered_weights
+        mask, filtered_saliency = zip(
+            *((masked_val, weight_val) for masked_val, weight_val in zip(mask, saliency) if masked_val == 1))
+        # add all saliencies to list
+        all_sal += filtered_saliency
 
-    return np.percentile(np.array(all_weights), percentage)
+    # calculate percentile
+    return np.percentile(np.array(all_sal), percentage)

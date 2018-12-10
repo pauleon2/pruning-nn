@@ -29,11 +29,18 @@ class MaskedLinearLayer(nn.Linear):
         super().__init__(in_feature, out_features, bias)
         # create a mask of ones for all weights (no element pruned at beginning)
         self.mask = Variable(torch.ones(self.weight.size()))
+        self.grad = None
 
     def set_mask(self, mask=None):
         if mask is not None:
             self.mask = Variable(mask)
         self.weight.data = self.weight.data * self.mask.data
+
+    def get_saliency(self):
+        if self.grad is None:
+            return self.weight.data.abs()
+        else:
+            return self.grad
 
     def get_mask(self):
         return self.mask
