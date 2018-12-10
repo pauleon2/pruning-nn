@@ -6,7 +6,8 @@ import torchvision.transforms as transforms
 import numpy as np
 import pandas as pd
 from pruning_nn.network import NeuralNetwork, get_single_pruning_layer, get_network_weight_count
-from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_based_pruning, random_pruning, obd_pruning
+from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_based_pruning, random_pruning, random_pruning_abs, \
+    obd_pruning, magnitude_based_pruning_abs
 from pruning_nn.util import train, test
 
 # constant variables
@@ -86,7 +87,7 @@ def train_network(filename='model.pt'):
 
 def prune_network(prune_strategy=None, filename='model.pt', runs=1):
     # setup variables for pruning
-    pruning_rate = hyper_params['pruning_percentage']
+    pruning_rate = 1000
 
     # prune using strategy
     strategy = PruneNeuralNetStrategy(prune_strategy)
@@ -104,7 +105,7 @@ def prune_network(prune_strategy=None, filename='model.pt', runs=1):
                                     lr=hyper_params['learning_rate'],
                                     momentum=hyper_params['momentum'])
 
-        while get_network_weight_count(model).item() > 100:
+        while get_network_weight_count(model).item() > pruning_rate:
             print('Prune model with ' + str(get_network_weight_count(model).item()) + ' weights using ' + str(
                 prune_strategy.__name__))
 
@@ -137,7 +138,7 @@ def prune_network(prune_strategy=None, filename='model.pt', runs=1):
             tmp = pd.DataFrame({'run': [i],
                                 'accuracy': [accuracy],
                                 'pruning_perc': [pruning_rate],
-                                'number_of_weights': [get_network_weight_count(model)],
+                                'number_of_weights': [get_network_weight_count(model).item()],
                                 'pruning_method': [str(prune_strategy.__name__)]})
             s = s.append(tmp, ignore_index=True)
 
@@ -150,6 +151,6 @@ def prune_network(prune_strategy=None, filename='model.pt', runs=1):
 
 # info: saved network's performance: 96.44 %
 setup()
-train_network()
-for strat in [random_pruning, magnitude_based_pruning]:
-    prune_network(prune_strategy=strat, runs=3)
+# train_network()
+for strat in [magnitude_based_pruning_abs, random_pruning_abs]:
+    prune_network(prune_strategy=strat, runs=1)
