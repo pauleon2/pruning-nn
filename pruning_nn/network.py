@@ -73,3 +73,10 @@ def get_weight_distribution(network):
 
         all_weights += list(filtered_weights)
     return pd.DataFrame(data=all_weights)
+
+
+def get_network_weight_count(network):
+    total_weights = 0
+    for layer in get_single_pruning_layer(network):
+        total_weights += layer.get_weight_count()
+    return total_weights
