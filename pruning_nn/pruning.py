@@ -71,8 +71,6 @@ class PruneNeuralNetStrategy:
 #
 # Top-Down Pruning Approaches
 #
-
-
 def obd_pruning(network, percentage, loss):
     """
     Implementation of the optimal brain damage algorithm.
@@ -82,36 +80,10 @@ def obd_pruning(network, percentage, loss):
     :param percentage: The percentage of weights that should be pruned.
     :param loss: The loss of the network on the trainings set. Needs to have grad enabled.
     """
-    # instead of using loss.backward(), use torch.autograd.grad() to compute 1st order gradients
-    print('Start calculating first order derivative')
-    loss_grads = grad(loss, network.parameters(), create_graph=True)
-    print('Finished calculating first order derivative')
-
-    # iterate over all parameter groups from the network
-    for grd, layer in zip(loss_grads, get_single_pruning_layer(network)):
-        print('Start calculating second order derivative for layer')
-        all_grads = torch.ones(layer.get_weight().view(-1).size())
-
-        for num, g in enumerate(grd.view(-1)):
-            drv = grad(g, layer.get_weight(), retain_graph=True)
-            all_grads[num] = drv[0].view(-1)[num]
-            if (num + 1) % 100 == 0:
-                print('Calculated 100 derivatives. Going on...')
-
-        print('Finished calculating second order derivative for layer')
-
-        with torch.no_grad:
-            layer.grad = all_grads.view(layer.get_weight().size()) * layer.get_weight().data.pow(2) * 0.5
-
+    calculate_obd_saliency(network, loss)
     # calculate threshold for pruning
-    layers = get_single_pruning_layer(network)
-    threshold = find_threshold(layers=layers, value=percentage, p_type=PruningType.TOP_P_PERCENTAGE)
-
-    # update mask
-    for layer in get_single_pruning_layer(network):
-        # All deleted weights should be set to zero so they should definetly be less than the threshold since this is
-        # positive.
-        layer.set_mask(torch.ge(layer.get_weight().data.abs(), threshold).float())
+    threshold = find_threshold(network=network, value=percentage, p_type=PruningType.TOP_P_PERCENTAGE)
+    prune_le_threshold(network, threshold)
 
 
 def obd_pruning_abs(network, percentage, loss):
@@ -123,36 +95,10 @@ def obd_pruning_abs(network, percentage, loss):
     :param percentage: The percentage of weights that should be pruned.
     :param loss: The loss of the network on the trainings set. Needs to have grad enabled.
     """
-    # instead of using loss.backward(), use torch.autograd.grad() to compute 1st order gradients
-    print('Start calculating first order derivative')
-    loss_grads = grad(loss, network.parameters(), create_graph=True)
-    print('Finished calculating first order derivative')
-
-    # iterate over all parameter groups from the network
-    for grd, layer in zip(loss_grads, get_single_pruning_layer(network)):
-        print('Start calculating second order derivative for layer')
-        all_grads = torch.ones(layer.get_weight().view(-1).size())
-
-        for num, g in enumerate(grd.view(-1)):
-            drv = grad(g, layer.get_weight(), retain_graph=True)
-            all_grads[num] = drv[0].view(-1)[num]
-            if (num + 1) % 100 == 0:
-                print('Calculated 100 derivatives. Going on...')
-
-        print('Finished calculating second order derivative for layer')
-
-        with torch.no_grad:
-            layer.grad = all_grads.view(layer.get_weight().size()) * layer.get_weight().data.pow(2) * 0.5
-
+    calculate_obd_saliency(network, loss)
     # calculate threshold for pruning
-    layers = get_single_pruning_layer(network)
-    threshold = find_threshold(layers=layers, value=percentage, p_type=PruningType.TOP_K_NUMBER)
-
-    # update mask
-    for layer in get_single_pruning_layer(network):
-        # All deleted weights should be set to zero so they should definetly be less than the threshold since this is
-        # positive.
-        layer.set_mask(torch.ge(layer.get_weight().data.abs(), threshold).float())
+    threshold = find_threshold(network=network, value=percentage, p_type=PruningType.TOP_K_NUMBER)
+    prune_le_threshold(network, threshold)
 
 
 def obs_pruning(network, percentage, loss):
@@ -177,8 +123,6 @@ def net_trim_pruning(network, percentage, loss):
 #
 # Network based pruning methods
 #
-
-
 def random_pruning(network, percentage):
     """
     Implementation of the random pruning. For each layer the given percentage of not yet pruned weights will be
@@ -229,6 +173,9 @@ def random_pruning_abs(network, percentage):
             if mask[x][y] == 1:
                 mask[x][y] = 0
                 prune_done += 1
+            elif prune_goal > weights_layer:
+                prune_goal = 0
+                print('NEED DUE TO FLOATING CALCULATIONS :(')
             else:
                 continue
         child.set_mask(mask)
@@ -241,38 +188,30 @@ def magnitude_based_pruning(network, percentage):
     :param network: The network where the pruning should be done.
     :param percentage: The percentage of not yet pruned weights that should be deleted.
     """
-    layers = get_single_pruning_layer(network)
-    threshold = find_threshold(layers=layers, value=percentage, p_type=PruningType.TOP_P_PERCENTAGE)
-    for layer in get_single_pruning_layer(network):
-        # All deleted weights should be set to zero so they should definetly be less than the threshold since this is
-        # positive.
-        layer.set_mask(torch.ge(layer.get_weight().data.abs(), threshold).float())
+    threshold = find_threshold(network=network, value=percentage, p_type=PruningType.TOP_P_PERCENTAGE)
+    prune_le_threshold(network, threshold)
 
 
 def magnitude_based_pruning_abs(network, percentage):
-    layers = get_single_pruning_layer(network)
-    threshold = find_threshold(layers=layers, value=percentage, p_type=PruningType.TOP_K_NUMBER)
-    for layer in get_single_pruning_layer(network):
-        # All deleted weights should be set to zero so they should definetly be less than the threshold since this is
-        # positive.
-        layer.set_mask(torch.ge(layer.get_weight().data.abs(), threshold).float())
+    threshold = find_threshold(network=network, value=percentage, p_type=PruningType.TOP_K_NUMBER)
+    prune_le_threshold(network, threshold)
 
 
 #
 # UTIL METHODS
 #
-def find_threshold(layers, value, p_type):
+def find_threshold(network, value, p_type):
     """
     Find a threshold for a percentage so that the percentage number of values are below the threshold and the rest
     above. The threshold is always a positive number since this method uses only the absolute numbers of the weight
     magnitudes.
-    :param layers: The layers of the network.
+    :param network: The layers of the network.
     :param value: The percentage/total number of weights that should be pruned.
     :param p_type: The type of pruning that is executed.
     :return: The calculated threshold.
     """
     all_sal = []
-    for layer in layers:
+    for layer in get_single_pruning_layer(network):
         # flatten both weights and mask
         mask = list(layer.get_mask().abs().numpy().flatten())
         saliency = list(layer.get_saliency().numpy().flatten())
@@ -289,3 +228,36 @@ def find_threshold(layers, value, p_type):
     elif p_type == PruningType.TOP_K_NUMBER:
         percentage = (value / len(all_sal)) * 100
         return np.percentile(np.array(all_sal), percentage)
+
+
+def prune_le_threshold(network, threshold):
+    for layer in get_single_pruning_layer(network):
+        # All deleted weights should be set to zero so they should definetly be less than the threshold since this is
+        # positive.
+        layer.set_mask(torch.ge(layer.get_saliency(), threshold).float())
+
+
+def prune_ge_threshold(network, threshold):
+    for layer in get_single_pruning_layer(network):
+        # All deleted weights should be set to zero so they should definetly be less than the threshold since this is
+        # positive.
+        layer.set_mask(torch.le(layer.get_saliency(), threshold).float())
+
+
+def calculate_obd_saliency(network, loss):
+    loss_grads = grad(loss, network.parameters(), create_graph=True)
+    # iterate over all parameter groups from the network
+    for grd, layer in zip(loss_grads, get_single_pruning_layer(network)):
+        all_grads = []
+        mask = layer.get_mask().view(-1)
+
+        for num, (g, m) in enumerate(zip(grd.view(-1), mask)):
+            if m.item() == 0:
+                all_grads += [0]
+            else:
+                drv = grad(g, layer.get_weight(), retain_graph=True)
+                all_grads += [drv[0].view(-1)[num].item()]
+
+        # set saliency
+        # todo: use set saliency method instead!!
+        layer.grad = torch.tensor(all_grads).view(layer.get_weight().size()) * layer.get_weight().data.pow(2) * 0.5
