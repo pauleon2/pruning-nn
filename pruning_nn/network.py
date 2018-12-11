@@ -24,6 +24,20 @@ class NeuralNetwork(nn.Module):
         return self.fc2(out)
 
 
+class MultiLayerNeuralNetwork(nn.Module):
+    def __init__(self, input_size, hidden_size, num_classes):
+        super(MultiLayerNeuralNetwork, self).__init__()
+        self.fc1 = MaskedLinearLayer(input_size, hidden_size)
+        self.fc2 = MaskedLinearLayer(hidden_size, hidden_size)
+        self.fc3 = MaskedLinearLayer(hidden_size, hidden_size)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        out = self.relu(self.fc1(x))
+        out = self.relu(self.fc2(out))
+        return self.fc3(out)
+
+
 class MaskedLinearLayer(nn.Linear):
     def __init__(self, in_feature, out_features, bias=True):
         super().__init__(in_feature, out_features, bias)
