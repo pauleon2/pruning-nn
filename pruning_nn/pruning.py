@@ -231,6 +231,10 @@ def find_threshold(network, value, p_type):
 
 
 def prune_le_threshold(network, threshold):
+    """
+    Delete all elements from the network that are less than the threshold
+    :return:
+    """
     for layer in get_single_pruning_layer(network):
         # All deleted weights should be set to zero so they should definetly be less than the threshold since this is
         # positive.
@@ -238,6 +242,9 @@ def prune_le_threshold(network, threshold):
 
 
 def prune_ge_threshold(network, threshold):
+    """
+    Delete all elements that are greater than the threshold
+    """
     for layer in get_single_pruning_layer(network):
         # All deleted weights should be set to zero so they should definetly be less than the threshold since this is
         # positive.
@@ -245,7 +252,9 @@ def prune_ge_threshold(network, threshold):
 
 
 def calculate_obd_saliency(network, loss):
-    loss_grads = grad(loss, network.parameters(), create_graph=True)
+    weight_params = map(lambda x: x.get_weight(), get_single_pruning_layer(network))
+    loss_grads = grad(loss, weight_params, create_graph=True)
+
     # iterate over all parameter groups from the network
     for grd, layer in zip(loss_grads, get_single_pruning_layer(network)):
         all_grads = []
