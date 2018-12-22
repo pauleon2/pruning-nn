@@ -46,11 +46,11 @@ class PruneNeuralNetStrategy:
         else:
             self.prune_strategy = random_pruning_uniform
 
-    def prune(self, network, percentage, loss=None):
+    def prune(self, network, value, loss=None):
         if self.requires_loss():
-            self.prune_strategy(network, percentage, loss)
+            self.prune_strategy(network, value, loss)
         else:
-            self.prune_strategy(network, percentage)
+            self.prune_strategy(network, value)
 
     def requires_loss(self):
         """
