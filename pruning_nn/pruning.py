@@ -4,6 +4,7 @@ import torch
 from torch.autograd import grad
 from pruning_nn.network import get_single_pruning_layer, get_network_weight_count
 from enum import Enum
+import logging
 
 
 class PruningType(Enum):
@@ -43,7 +44,7 @@ class PruneNeuralNetStrategy:
         if strategy:
             self.prune_strategy = strategy
         else:
-            self.prune_strategy = random_pruning
+            self.prune_strategy = random_pruning_uniform
 
     def prune(self, network, percentage, loss=None):
         if self.requires_loss():
@@ -56,7 +57,7 @@ class PruneNeuralNetStrategy:
         Check if the current pruning method needs the network's loss as an argument.
         :return: If a gradient of the network is required.
         """
-        return self.prune_strategy not in [random_pruning, random_pruning_abs, magnitude_based_pruning,
+        return self.prune_strategy not in [random_pruning_uniform, random_pruning_uniform_abs, magnitude_based_pruning,
                                            magnitude_based_pruning_abs]
 
     def require_retraining(self):
@@ -64,7 +65,7 @@ class PruneNeuralNetStrategy:
         Check if the current pruning strategy requires a retraining after the pruning is done
         :return: If the retraining is required.
         """
-        return self.prune_strategy in [random_pruning, random_pruning_abs, magnitude_based_pruning,
+        return self.prune_strategy in [random_pruning_uniform, random_pruning_uniform_abs, magnitude_based_pruning,
                                        magnitude_based_pruning_abs, obd_pruning, obd_pruning_abs]
 
 
@@ -86,44 +87,25 @@ def obd_pruning(network, percentage, loss):
     prune_le_threshold(network, threshold)
 
 
-def obd_pruning_abs(network, percentage, loss):
+def obd_pruning_abs(network, number_of_weights, loss):
     """
     Implementation of the optimal brain damage algorithm.
     Requires the gradient to be set in the network.
 
     :param network: The network where the calculations should be done.
-    :param percentage: The percentage of weights that should be pruned.
+    :param number_of_weights: The total number of weights that should be pruned.
     :param loss: The loss of the network on the trainings set. Needs to have grad enabled.
     """
     calculate_obd_saliency(network, loss)
     # calculate threshold for pruning
-    threshold = find_threshold(network=network, value=percentage, p_type=PruningType.TOP_K_NUMBER)
+    threshold = find_threshold(network=network, value=number_of_weights, p_type=PruningType.TOP_K_NUMBER)
     prune_le_threshold(network, threshold)
-
-
-def obs_pruning(network, percentage, loss):
-    """
-    Implementation of the optimal brain surgeon algorithm.
-    Requires the graidient to be set.
-
-    :param network: The network that should be pruned
-    :param percentage: The percentage of weights that should be pruned
-    """
-    pass
-
-
-def layer_wise_obs_pruning(network, percentage, loss):
-    pass
-
-
-def net_trim_pruning(network, percentage, loss):
-    pass
 
 
 #
 # Network based pruning methods
 #
-def random_pruning(network, percentage):
+def random_pruning_uniform(network, percentage):
     """
     Implementation of the random pruning. For each layer the given percentage of not yet pruned weights will be
     eliminated.
@@ -134,8 +116,6 @@ def random_pruning(network, percentage):
         mask = child.get_mask()
         total = mask.sum()  # All parameters that are non zero can be pruned
         prune_goal = (percentage * total) / 100
-        print('Total parameters {}, to be pruned {}'
-              .format(total, prune_goal))
         prune_done = 0
 
         while prune_done < prune_goal:
@@ -152,33 +132,28 @@ def random_pruning(network, percentage):
         child.set_mask(mask)
 
 
-def random_pruning_abs(network, percentage):
-    for child in get_single_pruning_layer(network):
-        mask = child.get_mask()
-        weights_layer = mask.sum()  # All parameters that are non zero can be pruned
-        weights_network = get_network_weight_count(network)
-        p = weights_layer / weights_network
+def random_pruning_uniform_abs(network, number_of_weights):
+    """
+    Uniform random pruning with absolute pruning
+    :param network: Te network that should be pruned
+    :param number_of_weights: The number of weights that should be eliminated from the network
+    """
+    ratio = (number_of_weights / get_network_weight_count(network)) * 100
+    random_pruning_uniform(network, ratio)
 
-        prune_goal = round(p.item() * percentage)
-        print('Total parameters {}, to be pruned {}'
-              .format(weights_layer, prune_goal))
-        prune_done = 0
 
-        while prune_done < prune_goal:
-            # select random input and output node
-            x = random.randint(0, child.get_weight().size()[0] - 1)
-            y = random.randint(0, child.get_weight().size()[1] - 1)
+def random_pruning_blinded(network, percentage):
+    """
+    Class-blinded implementation of random pruning
+    :param network: The network that should be pruned
+    :param percentage: The percentage of weights that should be pruned
+    """
+    pass
 
-            # if selected weight is still already pruned do nothing else prune this weight
-            if mask[x][y] == 1:
-                mask[x][y] = 0
-                prune_done += 1
-            elif prune_goal > weights_layer:
-                prune_goal = 0
-                print('NEED DUE TO FLOATING CALCULATIONS :(')
-            else:
-                continue
-        child.set_mask(mask)
+
+def random_pruning_blinded_abs(network, number_of_weights):
+    ratio = number_of_weights / get_network_weight_count(network)
+    random_pruning_blinded(network, ratio)
 
 
 def magnitude_based_pruning(network, percentage):
@@ -192,8 +167,8 @@ def magnitude_based_pruning(network, percentage):
     prune_le_threshold(network, threshold)
 
 
-def magnitude_based_pruning_abs(network, percentage):
-    threshold = find_threshold(network=network, value=percentage, p_type=PruningType.TOP_K_NUMBER)
+def magnitude_based_pruning_abs(network, number_of_weights):
+    threshold = find_threshold(network=network, value=number_of_weights, p_type=PruningType.TOP_K_NUMBER)
     prune_le_threshold(network, threshold)
 
 
@@ -252,6 +227,7 @@ def prune_ge_threshold(network, threshold):
 
 
 def calculate_obd_saliency(network, loss):
+    logging.info('Start obd procedure')
     weight_params = map(lambda x: x.get_weight(), get_single_pruning_layer(network))
     loss_grads = grad(loss, weight_params, create_graph=True)
 
@@ -266,7 +242,9 @@ def calculate_obd_saliency(network, loss):
             else:
                 drv = grad(g, layer.get_weight(), retain_graph=True)
                 all_grads += [drv[0].view(-1)[num].item()]
+            if (num + 1) % 1000 == 0:
+                logging.info('Calculated 1000 2nd order derivatives to be continued...')
 
         # set saliency
-        # todo: use set saliency method instead!!
-        layer.grad = torch.tensor(all_grads).view(layer.get_weight().size()) * layer.get_weight().data.pow(2) * 0.5
+        layer.set_saliency(
+            torch.tensor(all_grads).view(layer.get_weight().size()) * layer.get_weight().data.pow(2) * 0.5)
