@@ -3,25 +3,19 @@ import torch
 import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
-import numpy as np
 import pandas as pd
-from pruning_nn.network import NeuralNetwork, get_single_pruning_layer, get_network_weight_count
-from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_based_pruning, random_pruning_uniform, random_pruning_uniform_abs, \
-    obd_pruning, magnitude_based_pruning_abs, obd_pruning_abs
+from pruning_nn.network import NeuralNetwork, get_network_weight_count
+from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_based_blinded, random_pruning, random_pruning_abs, \
+    magnitude_based_blinded_abs, magnitude_based_uniform, magnitude_based_uniform_abs
 from pruning_nn.util import train, test
 import logging
 
 # constant variables
 hyper_params = {
-    'pruning_percentage': 20,  # percentage of weights pruned
-    'pruning_update_rate': 2,
-    'batch_size': 64,
-    'test_batch_size': 100,
     'num_retrain_epochs': 2,
     'num_epochs': 20,
     'learning_rate': 0.01,
-    'momentum': 0,
-    'hidden_units': 100
+    'momentum': 0
 }
 
 result_folder = './out/result/'
@@ -46,11 +40,11 @@ test_dataset = torchvision.datasets.MNIST(root=dataset_folder,
                                           download=True)
 
 train_loader = torch.utils.data.DataLoader(train_dataset,
-                                           batch_size=hyper_params['batch_size'],
+                                           batch_size=64,
                                            shuffle=True)
 
 test_loader = torch.utils.data.DataLoader(test_dataset,
-                                          batch_size=hyper_params['test_batch_size'],
+                                          batch_size=100,
                                           shuffle=True)
 
 
@@ -89,7 +83,7 @@ def calculate_2nd_order_loss(model, criterion):
 
 def train_network(filename='model.pt'):
     # create neural net and train (input is image, output is number between 0 and 9.
-    model = NeuralNetwork(28 * 28, hyper_params['hidden_units'], 10)
+    model = NeuralNetwork(28 * 28, 100, 10)
 
     # Criterion and optimizer
     # might actually use MSE Error
@@ -125,10 +119,6 @@ def prune_network(prune_strategy=None, filename='model.pt', runs=1):
             criterion, optimizer = setup_training(model)
 
             while get_network_weight_count(model).item() > 500:
-                logging.info(
-                    'Prune model with ' + str(get_network_weight_count(model).item()) + ' weights using ' + str(
-                        prune_strategy.__name__))
-
                 loss = None
                 if strategy.requires_loss():
                     loss = calculate_2nd_order_loss(model, criterion)  # calculate loss
@@ -201,8 +191,8 @@ def prune_network_abs(prune_strategy=None, filename='model.pt', runs=1):
                                     })
                 s = s.append(tmp, ignore_index=True)
 
-    # save the data frame
-    s.to_pickle(out_name + '.pkl')
+        # save the data frame
+        s.to_pickle(out_name + '.pkl')
 
 
 if __name__ == '__main__':
@@ -214,9 +204,9 @@ if __name__ == '__main__':
     train_network()
 
     # prune with percentage p
-    for strat in [random_pruning_uniform, magnitude_based_pruning]:
+    for strat in [random_pruning, magnitude_based_blinded, magnitude_based_uniform]:
         prune_network(prune_strategy=strat, runs=50)
 
     # prune absolute top k
-    for strat in [random_pruning_uniform_abs, magnitude_based_pruning_abs]:
+    for strat in [random_pruning_abs, magnitude_based_blinded_abs, magnitude_based_uniform_abs]:
         prune_network_abs(prune_strategy=strat, runs=50)
