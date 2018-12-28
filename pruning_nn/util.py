@@ -1,4 +1,5 @@
 import torch
+import logging
 
 
 def test(test_loader, model):
@@ -18,8 +19,8 @@ def test(test_loader, model):
             total += test_labels.size(0)
             correct += (predicted == test_labels).sum().item()
         per = 100 * correct / total
-        print('Accuracy of the network on the {} test images: {:.4f} %'
-              .format(total, per))
+        logging.info('Accuracy of the network on the {} test images: {:.4f} %'
+                     .format(total, per))
         return per
 
 
@@ -49,7 +50,7 @@ def train(train_loader, model, optimizer, criterion, epoch, total_epochs):
         loss.backward()
         optimizer.step()
 
-        if (i + 1) % 100 == 0:
-            print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'
-                  .format(epoch + 1, total_epochs, i + 1, total_step, loss.item()))
+        if (i + 1) % 1000 == 0:
+            logging.info('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'
+                         .format(epoch + 1, total_epochs, i + 1, total_step, loss.item()))
     return total_loss / len(train_loader)
