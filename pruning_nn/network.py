@@ -30,12 +30,14 @@ class MultiLayerNeuralNetwork(nn.Module):
         self.fc1 = MaskedLinearLayer(input_size, hidden_size)
         self.fc2 = MaskedLinearLayer(hidden_size, hidden_size)
         self.fc3 = MaskedLinearLayer(hidden_size, hidden_size)
+        self.fc4 = MaskedLinearLayer(hidden_size, num_classes)
         self.relu = nn.ReLU()
 
     def forward(self, x):
         out = self.relu(self.fc1(x))
         out = self.relu(self.fc2(out))
-        return self.fc3(out)
+        out = self.relu(self.fc3(out))
+        return self.fc4(out)
 
 
 class MaskedLinearLayer(nn.Linear):

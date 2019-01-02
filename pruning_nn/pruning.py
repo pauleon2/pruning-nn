@@ -14,8 +14,7 @@ class PruneNeuralNetStrategy:
 
     <ul>
         <li>Random Pruning</li>
-        <li>Magnitude Based Pruning - Class blinded</li>
-        <li>Magnitude Based Pruning - Uniform</li>
+        <li>Magnitude Based Pruning</li>
         <li>Optimal Brain Damage</li>
         <li>Optimal Brain Surgeon</li>
         <li>Net-Trim</li>
@@ -58,9 +57,8 @@ class PruneNeuralNetStrategy:
         Check if the current pruning strategy requires a retraining after the pruning is done
         :return: If the retraining is required.
         """
-        return self.prune_strategy in [random_pruning, random_pruning_abs, magnitude_based_blinded,
-                                       magnitude_based_blinded_abs, magnitude_based_uniform,
-                                       magnitude_based_uniform_abs, obd_pruning, obd_pruning_abs]
+        return self.prune_strategy in [random_pruning, random_pruning_abs, magnitude_based_pruning,
+                                       magnitude_based_pruning_abs, obd_pruning, obd_pruning_abs]
 
 
 #
@@ -132,7 +130,7 @@ def random_pruning_abs(network, number_of_weights):
     random_pruning(network, ratio)
 
 
-def magnitude_based_blinded(network, percentage):
+def magnitude_based_pruning(network, percentage):
     """
     Implementation of weight based pruning. In each step the percentage of not yet pruned weights will be eliminated
     starting with the smallest element in the network.
@@ -143,34 +141,9 @@ def magnitude_based_blinded(network, percentage):
     prune_le_threshold(network, threshold)
 
 
-def magnitude_based_blinded_abs(network, number_of_weights):
+def magnitude_based_pruning_abs(network, number_of_weights):
     percentage = ((number_of_weights * 100) / get_network_weight_count(network)).numpy()
-    magnitude_based_blinded(network, percentage)
-
-
-def magnitude_based_uniform(network, percentage):
-    """
-    Class blinded implementation of magnitude based pruning. There will be deleted the percentage of elements from each
-    layer. In each layer the elements with the smallest magnitude will be pruned first
-    :param network:
-    :param percentage:
-    :return:
-    """
-    for layer in get_single_pruning_layer(network):
-        # zip, filter, unzip the two lists
-        mask = list(layer.get_mask().abs().numpy().flatten())
-        weight = list(layer.get_saliency().numpy().flatten())
-        mask, filtered_weights = zip(
-            *((masked_val, weight_val) for masked_val, weight_val in zip(mask, weight) if masked_val == 1))
-
-        flattened_weights = np.array(filtered_weights)
-        threshold = np.percentile(flattened_weights, percentage)
-        layer.set_mask(torch.ge(layer.get_saliency(), threshold).float())
-
-
-def magnitude_based_uniform_abs(network, number_of_weights):
-    ratio = ((number_of_weights * 100) / get_network_weight_count(network)).numpy()
-    magnitude_based_uniform(network, ratio)
+    magnitude_based_pruning(network, percentage)
 
 
 #

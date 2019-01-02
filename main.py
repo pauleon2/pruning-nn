@@ -4,9 +4,9 @@ import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
 import pandas as pd
-from pruning_nn.network import NeuralNetwork, get_network_weight_count
-from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_based_blinded, random_pruning, random_pruning_abs, \
-    magnitude_based_blinded_abs, magnitude_based_uniform, magnitude_based_uniform_abs
+from pruning_nn.network import NeuralNetwork, MultiLayerNeuralNetwork, get_network_weight_count
+from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_based_pruning, random_pruning, random_pruning_abs, \
+    magnitude_based_pruning_abs
 from pruning_nn.util import train, test
 import logging
 
@@ -81,9 +81,11 @@ def calculate_2nd_order_loss(model, criterion):
     return loss
 
 
-def train_network(filename='model.pt'):
+def train_network(filename='model', multi_layer=False):
     # create neural net and train (input is image, output is number between 0 and 9.
     model = NeuralNetwork(28 * 28, 100, 10)
+    if multi_layer:
+        model = MultiLayerNeuralNetwork(28 * 28, 30, 10)
 
     # Criterion and optimizer
     # might actually use MSE Error
@@ -95,30 +97,30 @@ def train_network(filename='model.pt'):
         test(test_loader, model)
 
     # save the current model
-    torch.save(model, model_folder + filename)
+    torch.save(model, model_folder + filename + '.pt')
     logging.info('Saved pre-trained model to ' + model_folder + filename)
 
 
-def prune_network(prune_strategy=None, filename='model.pt', runs=1):
+def prune_network(prune_strategy=None, filename='model', runs=1):
     # setup variables for pruning
-    pruning_rates = [10, 15, 25]  # experiment for 10 and 20 percent of the weights each step.
+    pruning_rates = [10, 15, 25]  # experiment for 10, 15 and 25 percent of the weights each step.
 
     # prune using strategy
     strategy = PruneNeuralNetStrategy(prune_strategy)
 
     # output variables
-    out_name = result_folder + str(prune_strategy.__name__)
+    out_name = result_folder + str(prune_strategy.__name__) + '-' + filename
     s = pd.DataFrame(columns=['run', 'accuracy', 'pruning_perc', 'number_of_weights', 'pruning_method'])
 
     for rate in pruning_rates:
 
         for i in range(runs):
             # load model
-            model = torch.load(model_folder + filename)
+            model = torch.load(model_folder + filename + '.pt')
             # loss and optimizer for the loaded model
             criterion, optimizer = setup_training(model)
 
-            while get_network_weight_count(model).item() > 500:
+            while get_network_weight_count(model).item() > 400:
                 loss = None
                 if strategy.requires_loss():
                     loss = calculate_2nd_order_loss(model, criterion)  # calculate loss
@@ -149,18 +151,18 @@ def prune_network(prune_strategy=None, filename='model.pt', runs=1):
         s.to_pickle(out_name + '.pkl')
 
 
-def prune_network_abs(prune_strategy=None, filename='model.pt', runs=1):
+def prune_network_abs(prune_strategy=None, filename='model', runs=1):
     pruning_rates = [1000, 2000, 5000]
 
     # prune using strategy
     strategy = PruneNeuralNetStrategy(prune_strategy)
 
-    out_name = result_folder + str(prune_strategy.__name__)
+    out_name = result_folder + str(prune_strategy.__name__) + '-' + filename
     s = pd.DataFrame(columns=['run', 'accuracy', 'pruning_num', 'number_of_weights', 'pruning_method'])
 
     for rate in pruning_rates:
         for i in range(runs):
-            model = torch.load(model_folder + filename)
+            model = torch.load(model_folder + filename + '.pt')
             # loss and optimizer for the loaded model
             criterion, optimizer = setup_training(model)
             while get_network_weight_count(model).item() > rate:
@@ -201,12 +203,13 @@ if __name__ == '__main__':
     logging.basicConfig(filename='out/myapp.log', level=logging.INFO, format='%(asctime)s %(message)s')
 
     # train the model
-    train_network()
+    for name in ['model1', 'model2', 'model3', 'model4']:
+        train_network(filename=name)
 
-    # prune with percentage p
-    for strat in [random_pruning, magnitude_based_blinded, magnitude_based_uniform]:
-        prune_network(prune_strategy=strat, runs=50)
+        # prune with percentage p
+        for strat in [random_pruning, magnitude_based_pruning]:
+            prune_network(prune_strategy=strat, filename=name, runs=25)
 
-    # prune absolute top k
-    for strat in [random_pruning_abs, magnitude_based_blinded_abs, magnitude_based_uniform_abs]:
-        prune_network_abs(prune_strategy=strat, runs=50)
+        # prune absolute top k
+        for strat in [random_pruning_abs, magnitude_based_pruning_abs]:
+            prune_network_abs(prune_strategy=strat, filename=name, runs=25)
