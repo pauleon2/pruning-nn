@@ -7,7 +7,7 @@ import pandas as pd
 from pruning_nn.network import NeuralNetwork, MultiLayerNeuralNetwork, get_network_weight_count
 from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_based_pruning, random_pruning, random_pruning_abs, \
     magnitude_based_pruning_abs
-from pruning_nn.util import train, test
+from algorithm_nn.util import train, test
 import logging
 
 # constant variables
@@ -94,7 +94,7 @@ def train_network(filename='model', multi_layer=False):
     # train and test the network
     for epoch in range(hyper_params['num_epochs']):
         train(train_loader, model, optimizer, criterion, epoch, hyper_params['num_epochs'])
-        test(test_loader, model)
+        # test(test_loader, model)
 
     # save the current model
     torch.save(model, model_folder + filename + '.pt')
@@ -203,8 +203,11 @@ if __name__ == '__main__':
     logging.basicConfig(filename='out/myapp.log', level=logging.INFO, format='%(asctime)s %(message)s')
 
     # train the model
-    for name in ['model1', 'model2', 'model3', 'model4']:
-        train_network(filename=name)
+    for j in range(8):
+        name = 'model' + str(j)
+        multi = j >= 4
+
+        train_network(filename=name, multi_layer=multi)
 
         # prune with percentage p
         for strat in [random_pruning, magnitude_based_pruning]:
