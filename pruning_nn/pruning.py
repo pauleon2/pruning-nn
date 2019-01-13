@@ -14,10 +14,15 @@ class PruneNeuralNetStrategy:
 
     <ul>
         <li>Random Pruning</li>
-        <li>Magnitude Based Pruning</li>
+        <li>Magnitude Pruning Blinded</li>
+        <li>Magnitude Pruning Uniform</li>
         <li>Optimal Brain Damage</li>
+    </ul>
+
+    The following strategies will e implemented in the future
+
+    <ul>
         <li>Optimal Brain Surgeon</li>
-        <li>Net-Trim</li>
         <li>Layer-wise Optimal Brain Surgeon</li>
     </ul>
 
@@ -26,7 +31,7 @@ class PruneNeuralNetStrategy:
     If no Strategy is specified random pruning will be used as a fallback.
     """
 
-    def __init__(self, strategy=None):
+    def __init__(self, strategy):
         """
         Creates a new PruneNeuralNetStrategy object. There are a number of pruning strategies supported currently there
         is random pruning only.
@@ -34,10 +39,7 @@ class PruneNeuralNetStrategy:
         :param strategy:    The selected strategy for pruning If no pruning strategy is provided random pruning will be
                             selected as the standard pruning method.
         """
-        if strategy:
-            self.prune_strategy = strategy
-        else:
-            self.prune_strategy = random_pruning
+        self.prune_strategy = strategy
 
     def prune(self, network, value, loss=None):
         if self.requires_loss():
@@ -48,114 +50,97 @@ class PruneNeuralNetStrategy:
     def requires_loss(self):
         """
         Check if the current pruning method needs the network's loss as an argument.
-        :return: If a gradient of the network is required.
+        :return: True iff a gradient of the network is required.
         """
-        return self.prune_strategy in [obd_pruning_abs, obd_pruning]
+        return self.prune_strategy in [optimal_brain_damage, gradient_magnitude]
 
     def require_retraining(self):
         """
         Check if the current pruning strategy requires a retraining after the pruning is done
-        :return: If the retraining is required.
+        :return: True iff the retraining is required.
         """
-        return self.prune_strategy in [random_pruning, random_pruning_abs, magnitude_based_pruning,
-                                       magnitude_based_pruning_abs, obd_pruning, obd_pruning_abs]
+        return self.prune_strategy not in []
 
 
 #
 # Top-Down Pruning Approaches
 #
-def obd_pruning(network, percentage, loss):
+def optimal_brain_damage(network, percentage, loss):
     """
     Implementation of the optimal brain damage algorithm.
     Requires the gradient to be set in the network.
 
-    :param network: The network where the calculations should be done.
-    :param percentage: The percentage of weights that should be pruned.
-    :param loss: The loss of the network on the trainings set. Needs to have grad enabled.
+    :param network:     The network where the calculations should be done.
+    :param percentage:  The percentage of weights that should be pruned.
+    :param loss:        The loss of the network on the trainings set. Needs to have grad enabled.
     """
     calculate_obd_saliency(network, loss)
-    # calculate threshold for pruning
-    threshold = find_network_threshold(network, percentage)
-    prune_le_threshold(network, threshold)
+    prune_network_by_saliency(network, percentage)
 
 
-def obd_pruning_abs(network, number_of_weights, loss):
-    """
-    Implementation of the optimal brain damage algorithm.
-    Requires the gradient to be set in the network.
+def optimal_brain_surgeon(network, percentage, loss):
+    pass
 
-    :param network: The network where the calculations should be done.
-    :param number_of_weights: The total number of weights that should be pruned.
-    :param loss: The loss of the network on the trainings set. Needs to have grad enabled.
-    """
-    calculate_obd_saliency(network, loss)
-    # calculate threshold for pruning
-    percentage = ((number_of_weights * 100) / get_network_weight_count(network)).numpy()
-    threshold = find_network_threshold(network, percentage)
-    prune_le_threshold(network, threshold)
+
+def optimal_brain_surgeon_layer_wise(network, percentage, loss):
+    pass
 
 
 #
-# Network based pruning methods
+# Random pruning
 #
 def random_pruning(network, percentage):
-    """
-    Implementation of the random pruning. For each layer the given percentage of not yet pruned weights will be
-    eliminated.
-    :param network: The network where the pruning takes place.
-    :param percentage: The percentage of weights that should be pruned.
-    """
-    for child in get_single_pruning_layer(network):
-        mask = child.get_mask()
-        total = mask.sum()  # All parameters that are non zero can be pruned
-        prune_goal = (percentage * total) / 100
-        prune_done = 0
+    # set saliency to random values
+    for layer in get_single_pruning_layer(network):
+        layer.set_saliency(torch.rand_like(layer.get_weight()) * layer.get_mask())
 
-        while prune_done < prune_goal:
-            # select random input and output node
-            x = random.randint(0, child.get_weight().size()[0] - 1)
-            y = random.randint(0, child.get_weight().size()[1] - 1)
-
-            # if selected weight is still already pruned do nothing else prune this weight
-            if mask[x][y] == 1:
-                mask[x][y] = 0
-                prune_done += 1
-            else:
-                continue
-        child.set_mask(mask)
+    # prune the percentage% weights with the smallest random saliency
+    prune_network_by_saliency(network, percentage)
+    print(get_network_weight_count(network))
 
 
-def random_pruning_abs(network, number_of_weights):
-    ratio = (number_of_weights * 100) / get_network_weight_count(network)
-    random_pruning(network, ratio)
-
-
-def magnitude_based_pruning(network, percentage):
+#
+# Magnitude based approaches
+#
+def magnitude_class_blinded(network, percentage):
     """
     Implementation of weight based pruning. In each step the percentage of not yet pruned weights will be eliminated
     starting with the smallest element in the network.
-    :param network: The network where the pruning should be done.
-    :param percentage: The percentage of not yet pruned weights that should be deleted.
+
+    The here used method is the class blinded method mentioned in the paper by See et.al from 2016 (DOI: 1606.09274v1).
+    The method is also known from the paper by Bachor et.al from 2018 where it was named the PruNet pruning technique
+    (DOI: 10.1109/IJCNN.2018.8489764)
+
+    :param network:     The network where the pruning should be done.
+    :param percentage:  The percentage of not yet pruned weights that should be deleted.
     """
-    threshold = find_network_threshold(network, percentage)
-    prune_le_threshold(network, threshold)
+    prune_network_by_saliency(network, percentage)
 
 
-def magnitude_based_pruning_abs(network, number_of_weights):
-    percentage = ((number_of_weights * 100) / get_network_weight_count(network)).numpy()
-    magnitude_based_pruning(network, percentage)
+def magnitude_class_uniform(network, percentage):
+    prune_layer_by_saliency(network, percentage)
+
+
+#
+# Gradient based pruning
+#
+def gradient_magnitude(network, percentage, loss):
+    pass
 
 
 #
 # UTIL METHODS
 #
-def find_network_threshold(network, percentage):
+def prune_network_by_saliency(network, percentage):
     """
-    Find a threshold for a percentage so that the percentage number of values are below the threshold and the rest
-    above. The threshold is always a positive number since this method uses only the absolute numbers of the weight
-    magnitudes.
-    :param network: The layers of the network.
-    :param percentage: The percentage of weights that should be pruned.
+    Prune the number of percentage weights from the network. The elements are pruned according to the saliency that is
+    set in the network. By default the saliency is the actual weight of the connections. The number of elements are
+    pruned blinded. Meaning in each layer a different percentage of elements might get pruned but overall the given one
+    is removed from the network. This is a different approach than used in the method below where we prune exactly the
+    given percentage from each layer.
+
+    :param network:     The layers of the network.
+    :param percentage:  The percentage of weights that should be pruned.
     :return: The calculated threshold.
     """
     all_sal = []
@@ -171,28 +156,23 @@ def find_network_threshold(network, percentage):
         all_sal += filtered_saliency
 
     # calculate percentile
-    return np.percentile(np.array(all_sal), percentage)
+    th = np.percentile(np.array(all_sal), percentage)
 
-
-def prune_le_threshold(network, threshold):
-    """
-    Delete all elements from the network that are less than the threshold
-    :return:
-    """
+    # set the mask
     for layer in get_single_pruning_layer(network):
         # All deleted weights should be set to zero so they should definetly be less than the threshold since this is
         # positive.
-        layer.set_mask(torch.ge(layer.get_saliency(), threshold).float())
+        layer.set_mask(torch.ge(layer.get_saliency(), th).float())
 
 
-def prune_ge_threshold(network, threshold):
-    """
-    Delete all elements that are greater than the threshold
-    """
+def prune_layer_by_saliency(network, percentage):
     for layer in get_single_pruning_layer(network):
-        # All deleted weights should be set to zero so they should definetly be less than the threshold since this is
-        # positive.
-        layer.set_mask(torch.le(layer.get_saliency(), threshold).float())
+        mask = list(layer.get_mask().abs().numpy().flatten())
+        saliency = list(layer.get_saliency().numpy().flatten())
+        mask, filtered_saliency = zip(
+            *((masked_val, weight_val) for masked_val, weight_val in zip(mask, saliency) if masked_val == 1))
+        th = np.percentile(np.array(filtered_saliency), percentage)
+        layer.set_mask(torch.ge(layer.get_saliency(), th).float())
 
 
 def calculate_obd_saliency(network, loss):

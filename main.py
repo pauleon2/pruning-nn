@@ -5,8 +5,8 @@ import torchvision
 import torchvision.transforms as transforms
 import pandas as pd
 from pruning_nn.network import NeuralNetwork, MultiLayerNeuralNetwork, get_network_weight_count
-from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_based_pruning, random_pruning, random_pruning_abs, \
-    magnitude_based_pruning_abs
+from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_class_blinded, magnitude_class_uniform, \
+    random_pruning, optimal_brain_damage
 from algorithm_nn.util import train, test
 import logging
 
@@ -101,7 +101,7 @@ def train_network(filename='model', multi_layer=False):
     logging.info('Saved pre-trained model to ' + model_folder + filename)
 
 
-def prune_network(prune_strategy=None, filename='model', runs=1):
+def prune_network(prune_strategy, filename='model', runs=1):
     # setup variables for pruning
     pruning_rates = [10, 15, 25]  # experiment for 10, 15 and 25 percent of the weights each step.
 
@@ -151,52 +151,6 @@ def prune_network(prune_strategy=None, filename='model', runs=1):
         s.to_pickle(out_name + '.pkl')
 
 
-def prune_network_abs(prune_strategy=None, filename='model', runs=1):
-    pruning_rates = [1000, 2000, 5000]
-
-    # prune using strategy
-    strategy = PruneNeuralNetStrategy(prune_strategy)
-
-    out_name = result_folder + str(prune_strategy.__name__) + '-' + filename
-    s = pd.DataFrame(columns=['run', 'accuracy', 'pruning_num', 'number_of_weights', 'pruning_method'])
-
-    for rate in pruning_rates:
-        for i in range(runs):
-            model = torch.load(model_folder + filename + '.pt')
-            # loss and optimizer for the loaded model
-            criterion, optimizer = setup_training(model)
-            while get_network_weight_count(model).item() > rate:
-
-                loss = None
-                if strategy.requires_loss():
-                    loss = calculate_2nd_order_loss(model, criterion)
-                    torch.save(model, out_name + '.pt')  # save the model if server breaks
-                    s.to_pickle(out_name + '.pkl')  # save data so far if server breaks
-
-                strategy.prune(model, rate, loss=loss)
-
-                # Retrain and reevaluate
-                if strategy.require_retraining():
-                    for epoch in range(hyper_params['num_retrain_epochs']):
-                        train(train_loader, model, optimizer, criterion, epoch,
-                              hyper_params['num_retrain_epochs'])
-
-                # test network performance after pruning and retraining
-                accuracy = test(test_loader, model)
-
-                # accumulate data
-                tmp = pd.DataFrame({'run': [i],
-                                    'accuracy': [accuracy],
-                                    'pruning_num': [rate],
-                                    'number_of_weights': [get_network_weight_count(model).item()],
-                                    'pruning_method': [str(prune_strategy.__name__)]
-                                    })
-                s = s.append(tmp, ignore_index=True)
-
-        # save the data frame
-        s.to_pickle(out_name + '.pkl')
-
-
 if __name__ == '__main__':
     # setup environment
     setup()
@@ -210,9 +164,5 @@ if __name__ == '__main__':
         train_network(filename=name, multi_layer=multi)
 
         # prune with percentage p
-        for strat in [random_pruning, magnitude_based_pruning]:
+        for strat in [random_pruning, magnitude_class_blinded, magnitude_class_uniform]:
             prune_network(prune_strategy=strat, filename=name, runs=25)
-
-        # prune absolute top k
-        for strat in [random_pruning_abs, magnitude_based_pruning_abs]:
-            prune_network_abs(prune_strategy=strat, filename=name, runs=25)
