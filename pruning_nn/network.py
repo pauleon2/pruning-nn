@@ -45,13 +45,7 @@ class MaskedLinearLayer(nn.Linear):
         super().__init__(in_feature, out_features, bias)
         # create a mask of ones for all weights (no element pruned at beginning)
         self.mask = Variable(torch.ones(self.weight.size()))
-        self.grad = None
         self.saliency = None
-
-    def set_mask(self, mask=None):
-        if mask is not None:
-            self.mask = Variable(mask)
-        self.weight.data = self.weight.data * self.mask.data
 
     def get_saliency(self):
         if self.saliency is None:
@@ -65,11 +59,22 @@ class MaskedLinearLayer(nn.Linear):
     def get_mask(self):
         return self.mask
 
+    def set_mask(self, mask=None):
+        if mask is not None:
+            self.mask = Variable(mask)
+        self.weight.data = self.weight.data * self.mask.data
+
     def get_weight_count(self):
         return self.mask.sum()
 
     def get_weight(self):
         return self.weight
+
+    def reset_parameters(self, keep_mask=False):
+        super().reset_parameters()
+        if not keep_mask:
+            self.mask = Variable(torch.ones(self.weight.size()))
+            self.saliency = None
 
     def forward(self, x):
         weight = self.weight.mul(self.mask)
@@ -100,3 +105,8 @@ def get_network_weight_count(network):
     for layer in get_single_pruning_layer(network):
         total_weights += layer.get_weight_count()
     return total_weights
+
+
+def reset_pruned_network(network):
+    for layer in get_single_pruning_layer(network):
+        layer.reset_parameters(keep_mask=True)
