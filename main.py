@@ -6,8 +6,8 @@ import torchvision.transforms as transforms
 import pandas as pd
 from pruning_nn.network import NeuralNetwork, MultiLayerNeuralNetwork, get_network_weight_count
 from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_class_blinded, magnitude_class_uniform, \
-    random_pruning, optimal_brain_damage
-from algorithm_nn.util import train, test
+    random_pruning
+from pruning_nn.util import train, test
 import logging
 
 # constant variables
