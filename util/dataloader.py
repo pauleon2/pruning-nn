@@ -26,7 +26,7 @@ def get_train_valid_dataset(validation_split=0.3):
     split = int(np.floor(validation_split * dataset_size))
 
     # shuffle dataset
-    # np.random.seed(0)
+    np.random.seed(0)
     np.random.shuffle(indices)
     train_indices, val_indices = indices[split:], indices[:split]
 
@@ -36,6 +36,7 @@ def get_train_valid_dataset(validation_split=0.3):
 
     # create loader for train and validation sets
     train_loader = torch.utils.data.DataLoader(dataset, batch_size=64, sampler=train_sampler)
+    # todo: change batch size
     validation_loader = torch.utils.data.DataLoader(dataset, batch_size=64, sampler=valid_sampler)
 
     return train_loader, validation_loader

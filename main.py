@@ -1,13 +1,15 @@
 import os
+import logging
 import torch
 import torch.nn as nn
 import pandas as pd
-from pruning_nn.network import NeuralNetwork, MultiLayerNeuralNetwork, get_network_weight_count
+
+from pruning_nn.network import NeuralNetwork, MultiLayerNeuralNetwork
+from pruning_nn.util import get_network_weight_count
 from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_class_blinded, magnitude_class_uniform, \
     random_pruning
 from util.learning import train, test, cross_validation_error
 from util.dataloader import get_train_valid_dataset, get_test_dataset
-import logging
 
 # constant variables
 hyper_params = {
@@ -40,8 +42,6 @@ def setup_training(model):
     loss_func = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=hyper_params['learning_rate'],
                                 momentum=hyper_params['momentum'])
-    train_set, valid_set = get_train_valid_dataset()
-    test_set = get_test_dataset()
     return loss_func, optimizer
 
 

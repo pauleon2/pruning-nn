@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import torch.nn.functional as F
-import pandas as pd
 
 
 class NeuralNetwork(nn.Module):
@@ -41,11 +40,20 @@ class MultiLayerNeuralNetwork(nn.Module):
 
 
 class MaskedLinearLayer(nn.Linear):
-    def __init__(self, in_feature, out_features, bias=True):
+    def __init__(self, in_feature, out_features, bias=True, keep_layer_input=False):
+        """
+        :param in_feature:          The number of features that are inserted in the layer.
+        :param out_features:        The number of features that are returned by the layer.
+        :param bias:                Iff each neuron in the layer should have a bias unit as well.
+        :param keep_layer_input:    Iff the Mask should also store the layer input for further calculations. This is
+                                    needed by
+        """
         super().__init__(in_feature, out_features, bias)
         # create a mask of ones for all weights (no element pruned at beginning)
         self.mask = Variable(torch.ones(self.weight.size()))
         self.saliency = None
+        self.keep_layer_input = False
+        self.layer_input = None
 
     def get_saliency(self):
         if self.saliency is None:
@@ -77,36 +85,8 @@ class MaskedLinearLayer(nn.Linear):
             self.saliency = None
 
     def forward(self, x):
+        # eventually store the layer input
+        if self.keep_layer_input:
+            self.layer_input = x.data
         weight = self.weight.mul(self.mask)
         return F.linear(x, weight, self.bias)
-
-
-def get_single_pruning_layer(network):
-    for child in network.children():
-        if type(child) == MaskedLinearLayer:
-            yield child
-
-
-def get_weight_distribution(network):
-    all_weights = []
-    for layer in get_single_pruning_layer(network):
-        mask = list(layer.get_mask().numpy().flatten())
-        weights = list(layer.get_weight().data.numpy().flatten())
-
-        masked_val, filtered_weights = zip(
-            *((masked_val, weight_val) for masked_val, weight_val in zip(mask, weights) if masked_val == 1))
-
-        all_weights += list(filtered_weights)
-    return pd.DataFrame(data=all_weights)
-
-
-def get_network_weight_count(network):
-    total_weights = 0
-    for layer in get_single_pruning_layer(network):
-        total_weights += layer.get_weight_count()
-    return total_weights
-
-
-def reset_pruned_network(network):
-    for layer in get_single_pruning_layer(network):
-        layer.reset_parameters(keep_mask=True)
