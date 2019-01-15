@@ -1,18 +1,18 @@
 import os
 import torch
 import torch.nn as nn
-import torchvision
-import torchvision.transforms as transforms
 import pandas as pd
 from pruning_nn.network import NeuralNetwork, MultiLayerNeuralNetwork, get_network_weight_count
 from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_class_blinded, magnitude_class_uniform, \
     random_pruning
-from pruning_nn.util import train, test
+from util.learning import train, test, cross_validation_error
+from util.dataloader import get_train_valid_dataset, get_test_dataset
 import logging
 
 # constant variables
 hyper_params = {
     'num_retrain_epochs': 2,
+    'max_retrain_epochs': 5,
     'num_epochs': 20,
     'learning_rate': 0.01,
     'momentum': 0
@@ -20,32 +20,9 @@ hyper_params = {
 
 result_folder = './out/result/'
 model_folder = './out/model/'
-dataset_folder = './dataset/mnist'
 
-transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.1307,), (0.3081,))
-])
-
-# load trainings dataset
-train_dataset = torchvision.datasets.MNIST(root=dataset_folder,
-                                           train=True,
-                                           transform=transform,
-                                           download=True)
-
-# load test dataset
-test_dataset = torchvision.datasets.MNIST(root=dataset_folder,
-                                          train=False,
-                                          transform=transform,
-                                          download=True)
-
-train_loader = torch.utils.data.DataLoader(train_dataset,
-                                           batch_size=64,
-                                           shuffle=True)
-
-test_loader = torch.utils.data.DataLoader(test_dataset,
-                                          batch_size=100,
-                                          shuffle=True)
+test_set = get_test_dataset()
+train_set, valid_set = get_train_valid_dataset()
 
 
 def setup():
@@ -63,22 +40,9 @@ def setup_training(model):
     loss_func = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=hyper_params['learning_rate'],
                                 momentum=hyper_params['momentum'])
+    train_set, valid_set = get_train_valid_dataset()
+    test_set = get_test_dataset()
     return loss_func, optimizer
-
-
-def calculate_2nd_order_loss(model, criterion):
-    logging.info('Calculate network loss for 2nd order derivative')
-    train_loader_second_order = torch.utils.data.DataLoader(train_dataset,
-                                                            batch_size=train_dataset.__len__())
-    # todo: introduce cross validation set
-    loss = None
-    for (images, labels) in train_loader_second_order:
-        images = images.reshape(-1, 28 * 28)
-        outputs = model(images)
-        loss = criterion(outputs, labels)
-    logging.info('Finished calculating loss for 2nd order derivative. The overall error is {:.4f}'
-                 .format(loss.item()))
-    return loss
 
 
 def train_network(filename='model', multi_layer=False):
@@ -93,7 +57,7 @@ def train_network(filename='model', multi_layer=False):
 
     # train and test the network
     for epoch in range(hyper_params['num_epochs']):
-        train(train_loader, model, optimizer, criterion, epoch, hyper_params['num_epochs'])
+        train(train_set, model, optimizer, criterion)
         # test(test_loader, model)
 
     # save the current model
@@ -112,35 +76,42 @@ def prune_network(prune_strategy, filename='model', runs=1):
     out_name = result_folder + str(prune_strategy.__name__) + '-' + filename
     s = pd.DataFrame(columns=['run', 'accuracy', 'pruning_perc', 'number_of_weights', 'pruning_method'])
 
+    # prune with different pruning rates
     for rate in pruning_rates:
 
+        # repeat all experiments a fixed number of times
         for i in range(runs):
             # load model
             model = torch.load(model_folder + filename + '.pt')
+
             # loss and optimizer for the loaded model
             criterion, optimizer = setup_training(model)
 
-            while get_network_weight_count(model).item() > 400:
+            # prune as long as there are more than 500 elements in the network
+            while get_network_weight_count(model).item() > 500:
                 loss = None
-                if strategy.requires_loss():
-                    loss = calculate_2nd_order_loss(model, criterion)  # calculate loss
+                if strategy.requires_loss():  # todo: should probably done in another way
+                    loss = cross_validation_error(valid_set, model, criterion)  # calculate loss
                     torch.save(model, out_name + '.pt')  # save the model if server breaks
                     s.to_pickle(out_name + '.pkl')  # save data so far if server breaks
 
+                org_acc = test(test_set, model)
                 strategy.prune(model, rate, loss=loss)
 
                 # Retrain and reevaluate
+                pruned_acc = test(test_set, model)
                 if strategy.require_retraining():
+                    # todo: use dynamic criterion instead e.g. the test accuracy drop
                     for epoch in range(hyper_params['num_retrain_epochs']):
-                        train(train_loader, model, optimizer, criterion, epoch,
-                              hyper_params['num_retrain_epochs'])
+                        train(train_set, model, optimizer, criterion)
 
                 # test network performance after pruning and retraining
-                accuracy = test(test_loader, model)
+                # todo: save pruned model with best accuracy
+                retrained_accuracy = test(test_set, model)
 
                 # accumulate data
                 tmp = pd.DataFrame({'run': [i],
-                                    'accuracy': [accuracy],
+                                    'accuracy': [retrained_accuracy],
                                     'pruning_perc': [rate],
                                     'number_of_weights': [get_network_weight_count(model).item()],
                                     'pruning_method': [str(prune_strategy.__name__)]

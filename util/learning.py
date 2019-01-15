@@ -21,17 +21,15 @@ def test(test_loader, model):
         return 100 * correct / total
 
 
-def train(train_loader, model, optimizer, criterion, epoch, total_epochs, percentage=False):
+def train(train_loader, model, optimizer, criterion, percentage=False):
     """
     Train the model on the train data set with a loss function and and optimization algorithm.
 
     :param train_loader:    The training data set.
     :param model:           The to be trained model.
-    :param optimizer:       The used optimizer.
-    :param criterion:       The loss function.
-    :param epoch:           The current epoch.
-    :param total_epochs:    The total number of epochs.
-    :param percentage:      If the function should also calculate the percentage of right made decisions
+    :param optimizer:       The used optimizer for the learning process.
+    :param criterion:       The loss function of the network.
+    :param percentage:      If the function should also calculate the percentage of right made decisions.
     :return: The average loss of the network in this epoch.
     """
     total_step = len(train_loader)
@@ -63,3 +61,22 @@ def train(train_loader, model, optimizer, criterion, epoch, total_epochs, percen
         per = 0
 
     return total_loss / len(train_loader), per
+
+
+def cross_validation_error(data_set, model, criterion):
+    """
+    Calculate the loss of the network on the cross-validation dataset.
+
+    :param data_set:   The loader of the cross validation dataset.
+    :param model:      The model on which the loss should be calculated on.
+    :param criterion:  The loss function that should be used with the model.
+    :return: The overall loss of the network.
+    """
+
+    loss = 0
+    for (images, labels) in data_set:
+        images = images.reshape(-1, 28 * 28)
+        outputs = model(images)
+        loss += criterion(outputs, labels).item()  # todo: evaluate if this is sufficient
+
+    return loss
