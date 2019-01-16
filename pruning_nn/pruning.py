@@ -1,9 +1,8 @@
-import numpy as np
 import torch
 from torch.autograd import grad
 from pruning_nn.util import get_single_pruning_layer, get_network_weight_count, prune_layer_by_saliency, \
-    prune_network_by_saliency, generate_hessian_inv_woodbury
-from util.learning import train
+    prune_network_by_saliency
+from util.learning import cross_validation_error
 
 
 class PruneNeuralNetStrategy:
@@ -47,11 +46,19 @@ class PruneNeuralNetStrategy:
         """
         self.prune_strategy = strategy
 
-    def prune(self, network, value, loss=None):
-        if self.requires_loss():
-            self.prune_strategy(network, value, loss)
-        else:
-            self.prune_strategy(network, value)
+        # dataset and loss function for error calculation
+        self.criterion = None
+        self.valid_dataset = None
+
+    def prune(self, network, value):
+        """
+        Wrapper method which calls the actual pruning strategy and computes how long it takes to complete the pruning
+        step.
+
+        :param network:     The network that should be pruned
+        :param value:       The percentage of elements that should be pruned
+        """
+        self.prune_strategy(self, network, value)
 
     def requires_loss(self):
         """
@@ -72,20 +79,25 @@ class PruneNeuralNetStrategy:
 #
 # Top-Down Pruning Approaches
 #
-def optimal_brain_damage(network, percentage, loss):
+def optimal_brain_damage(self, network, percentage):
     """
     Implementation of the optimal brain damage algorithm.
     Requires the gradient to be set in the network.
 
+    :param self:        The strategy pattern object.
     :param network:     The network where the calculations should be done.
     :param percentage:  The percentage of weights that should be pruned.
-    :param loss:        The loss of the network on the trainings set. Needs to have grad enabled.
     """
+    # the loss of the network on the cross validation set
+    loss = cross_validation_error(self.valid_dataset, network, self.criterion)
+    print(loss)
+
     # Use GPU optimization if available
     if torch.cuda.is_available():
         network.cuda()
         loss.cuda()
 
+    # calculate the first order gradients for all weights from the pruning layers.
     weight_params = map(lambda x: x.get_weight(), get_single_pruning_layer(network))
     loss_grads = grad(loss, weight_params, create_graph=True)
 
@@ -114,25 +126,23 @@ def optimal_brain_damage(network, percentage, loss):
     prune_network_by_saliency(network, percentage)
 
 
-def optimal_brain_surgeon(network, percentage, loss):
-    validation_set = None
-
+def optimal_brain_surgeon(self, network, percentage):
     # enable keeping of original inputs of the network
     network.keep_layer_input = True
 
-    # use validation set to calculate network loss
-    for btx in validation_set:
-        loss = network(btx)
+    # calculate the loss of the network
+    loss = cross_validation_error(self.valid_dataset, network, self.criterion)
 
     prune_goal = (get_network_weight_count(network) * percentage) / 100
     prune_done = 0
+    print(prune_goal)
 
     while prune_goal < prune_done:
         # todo: implement obs
         pass
 
 
-def optimal_brain_surgeon_layer_wise(network, percentage, loss):
+def optimal_brain_surgeon_layer_wise(self, network, percentage):
     """
     Layer-wise calculation of the inverse of the hessian matrix. Then the weights are ranked similar to the original
     optimal brian surgeon algorithm.
@@ -142,7 +152,7 @@ def optimal_brain_surgeon_layer_wise(network, percentage, loss):
 
     :param network:     The network that should be pruned.
     :param percentage:  What percentage of the weights should be pruned.
-    :param loss: The loss of the network on the cross validation set.
+    :param self:        The strategy pattern object the method is attached to.
     """
     prune_goal = (get_network_weight_count(network) * percentage) / 100
     prune_done = 0
@@ -150,12 +160,17 @@ def optimal_brain_surgeon_layer_wise(network, percentage, loss):
     # todo: implement
     exit()
 
+    """
     # calculate the hessian inverse for every layer and save it to a file
     for layer in get_single_pruning_layer(network):
         layer_name = layer.__name__
+        n_hessian_batch_used = 1
+        hessian_batch_size = 1
+        use_Woodbury_tfbackend = True
+        stride_factor = 1
         # todo: loss should be a parameter of ths function
         hessian_inv = generate_hessian_inv_woodbury(net=network,
-                                                    trainloader=hessian_loader,
+                                                    trainloader=self.valid_dataset,
                                                     layer_name=layer_name,
                                                     layer_type='F',
                                                     n_batch_used=n_hessian_batch_used,
@@ -189,12 +204,13 @@ def optimal_brain_surgeon_layer_wise(network, percentage, loss):
             wb[:, prune_col_idx] += delta_W
             mask[prune_row_idx, prune_col_idx] = 0
             # wb = np.multiply(wb, mask)
+    """
 
 
 #
 # Random pruning
 #
-def random_pruning(network, percentage):
+def random_pruning(self, network, percentage):
     # set saliency to random values
     for layer in get_single_pruning_layer(network):
         layer.set_saliency(torch.rand_like(layer.get_weight()) * layer.get_mask())
@@ -207,7 +223,7 @@ def random_pruning(network, percentage):
 #
 # Magnitude based approaches
 #
-def magnitude_class_blinded(network, percentage):
+def magnitude_class_blinded(self, network, percentage):
     """
     Implementation of weight based pruning. In each step the percentage of not yet pruned weights will be eliminated
     starting with the smallest element in the network.
@@ -222,11 +238,11 @@ def magnitude_class_blinded(network, percentage):
     prune_network_by_saliency(network, percentage)
 
 
-def magnitude_class_uniform(network, percentage):
+def magnitude_class_uniform(self, network, percentage):
     prune_layer_by_saliency(network, percentage)
 
 
-def magnitude_class_distributed(network, percentage):
+def magnitude_class_distributed(self, network, percentage):
     """
     This idea comes from the paper 'Learning both Weights and Connections for Efficient Neural Networks'
     (arXiv:1506.02626v3). The main idea is that in each layer respectively to the standard derivation many elements
@@ -245,7 +261,7 @@ def magnitude_class_distributed(network, percentage):
 #
 # Gradient based pruning
 #
-def gradient_magnitude(network, percentage, loss):
+def gradient_magnitude(self, network, percentage):
     """
     Saliency measure based on the first order derivative i.e. the gradient of the weight. This idea is adapted from the
     paper 'Pruning CNN for Resource Efficient Interference' by Molchanov et.al who did this sort of pruning for

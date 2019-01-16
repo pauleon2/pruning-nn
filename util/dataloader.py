@@ -17,7 +17,7 @@ def get_train_valid_dataset(validation_split=0.3):
         transforms.Normalize((0.1307,), (0.3081,))
     ])
 
-    dataset = datasets.MNIST('../dataset', train=True, download=True, transform=transform)
+    dataset = datasets.MNIST('./dataset', train=True, download=True, transform=transform)
     # valid_dataset = datasets.MNIST('../data', train=True, download=True, transform=transform)
 
     # Creating data indices for training and validation splits:
@@ -36,8 +36,7 @@ def get_train_valid_dataset(validation_split=0.3):
 
     # create loader for train and validation sets
     train_loader = torch.utils.data.DataLoader(dataset, batch_size=64, sampler=train_sampler)
-    # todo: change batch size
-    validation_loader = torch.utils.data.DataLoader(dataset, batch_size=64, sampler=valid_sampler)
+    validation_loader = torch.utils.data.DataLoader(dataset, batch_size=split, sampler=valid_sampler)
 
     return train_loader, validation_loader
 
@@ -54,5 +53,5 @@ def get_test_dataset():
     ])
 
     return torch.utils.data.DataLoader(
-        datasets.MNIST('../dataset', train=False, transform=transform),
+        datasets.MNIST('./dataset', train=False, download=True, transform=transform),
         batch_size=100, shuffle=True)

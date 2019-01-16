@@ -1,5 +1,6 @@
 import os
 import logging
+import time
 import torch
 import torch.nn as nn
 import pandas as pd
@@ -7,14 +8,14 @@ import pandas as pd
 from pruning_nn.network import NeuralNetwork, MultiLayerNeuralNetwork
 from pruning_nn.util import get_network_weight_count
 from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_class_blinded, magnitude_class_uniform, \
-    random_pruning
+    random_pruning, optimal_brain_damage
 from util.learning import train, test, cross_validation_error
 from util.dataloader import get_train_valid_dataset, get_test_dataset
 
 # constant variables
 hyper_params = {
     'num_retrain_epochs': 2,
-    'max_retrain_epochs': 5,
+    'max_retrain_epochs': 10,
     'num_epochs': 20,
     'learning_rate': 0.01,
     'momentum': 0
@@ -67,10 +68,13 @@ def train_network(filename='model', multi_layer=False):
 
 def prune_network(prune_strategy, filename='model', runs=1):
     # setup variables for pruning
-    pruning_rates = [10, 15, 25]  # experiment for 10, 15 and 25 percent of the weights each step.
+    pruning_rates = [10, 25, 50, 60, 70]  # experiment for 10, 15 and 25 percent of the weights each step.
 
     # prune using strategy
     strategy = PruneNeuralNetStrategy(prune_strategy)
+    if strategy.requires_loss():
+        _, strategy.valid_dataset = get_train_valid_dataset()
+        strategy.criterion = nn.CrossEntropyLoss()  # todo: put in own method maybe
 
     # output variables
     out_name = result_folder + str(prune_strategy.__name__) + '-' + filename
@@ -83,40 +87,63 @@ def prune_network(prune_strategy, filename='model', runs=1):
         for i in range(runs):
             # load model
             model = torch.load(model_folder + filename + '.pt')
+            original_acc = test(test_set, model)
+            original_weight_count = get_network_weight_count(model)
 
             # loss and optimizer for the loaded model
             criterion, optimizer = setup_training(model)
 
             # prune as long as there are more than 500 elements in the network
             while get_network_weight_count(model).item() > 500:
-                loss = None
-                if strategy.requires_loss():  # todo: should probably done in another way
-                    loss = cross_validation_error(valid_set, model, criterion)  # calculate loss
-                    torch.save(model, out_name + '.pt')  # save the model if server breaks
-                    s.to_pickle(out_name + '.pkl')  # save data so far if server breaks
+                start = time.time()
+                strategy.prune(model, rate)
 
-                org_acc = test(test_set, model)
-                strategy.prune(model, rate, loss=loss)
-
-                # Retrain and reevaluate
-                pruned_acc = test(test_set, model)
+                # Retrain and reevaluate the process
                 if strategy.require_retraining():
-                    # todo: use dynamic criterion instead e.g. the test accuracy drop
-                    for epoch in range(hyper_params['num_retrain_epochs']):
-                        train(train_set, model, optimizer, criterion)
+                    untrained_acc = test(test_set, model)
+                    # setup variables for loop retraining
+                    prev_acc = untrained_acc
+                    retrain = True
+                    retrain_epoch = 1
 
-                # test network performance after pruning and retraining
-                # todo: save pruned model with best accuracy
-                retrained_accuracy = test(test_set, model)
+                    while retrain:
+                        train(train_set, model, optimizer, criterion)
+                        new_acc = test(test_set, model)
+
+                        # stop retraining if the test accuracy imporves only slightly or the maximum number of
+                        # retrainnig epochs is reached
+                        if new_acc - prev_acc < 0.01 or retrain_epoch >= hyper_params['num_retrain_epochs']:
+                            retrain = False
+                        else:
+                            retrain_epoch += 1
+                            prev_acc = new_acc
+
+                    final_acc = test(test_set, model)
+                    retrain_change = final_acc - untrained_acc
+                else:
+                    retrain_epoch = 0
+                    final_acc = test(test_set, model)
+                    retrain_change = 0
+
+                # todo: save the two best models with the following criterion:
+                # 1. smallest weight count with max 1% accuracy drop from the original model.
+                # 2. best performing model overall with at least a compression rate of 50%.
+
+                # evaluate duration of process
+                time_needed = time.time() - start
 
                 # accumulate data
+                # todo: optimize the data frame append
                 tmp = pd.DataFrame({'run': [i],
-                                    'accuracy': [retrained_accuracy],
+                                    'accuracy': [final_acc],
                                     'pruning_perc': [rate],
                                     'number_of_weights': [get_network_weight_count(model).item()],
-                                    'pruning_method': [str(prune_strategy.__name__)]
+                                    'pruning_method': [str(prune_strategy.__name__)],
+                                    'time': [time_needed],
+                                    'retrain_change': [retrain_change],
+                                    'retrain_epochs': [retrain_epoch]
                                     })
-                s = s.append(tmp, ignore_index=True)
+                s = s.append(tmp, ignore_index=True, sort=True)
 
         # save data frame
         s.to_pickle(out_name + '.pkl')
@@ -126,6 +153,9 @@ if __name__ == '__main__':
     # setup environment
     setup()
     logging.basicConfig(filename='out/myapp.log', level=logging.INFO, format='%(asctime)s %(message)s')
+
+    # train_network()
+    prune_network(magnitude_class_blinded)
 
     # train the model
     for j in range(8):
