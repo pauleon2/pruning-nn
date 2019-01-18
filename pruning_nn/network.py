@@ -52,7 +52,7 @@ class MaskedLinearLayer(nn.Linear):
         # create a mask of ones for all weights (no element pruned at beginning)
         self.mask = Variable(torch.ones(self.weight.size()))
         self.saliency = None
-        self.keep_layer_input = False
+        self.keep_layer_input = keep_layer_input
         self.layer_input = None
 
     def get_saliency(self):

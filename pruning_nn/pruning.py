@@ -1,7 +1,10 @@
 import torch
+import os
+import numpy as np
 from torch.autograd import grad
 from pruning_nn.util import get_single_pruning_layer, get_network_weight_count, prune_layer_by_saliency, \
-    prune_network_by_saliency
+    prune_network_by_saliency, generate_hessian_inverse_fc, edge_cut, keep_input_layerwise, \
+    get_single_pruning_layer_with_name
 from util.learning import cross_validation_error
 
 
@@ -29,7 +32,7 @@ class PruneNeuralNetStrategy:
     <ul>
         <li>Magnitude Pruning Distribution</li>
         <li>Gradient Magnitude Pruning</li>
-    </ul
+    </ul>
 
     All methods except of the random pruning and magnitude based pruning require the loss argument. In order to
     calculate the weight saliency in a top-down approach.
@@ -90,7 +93,6 @@ def optimal_brain_damage(self, network, percentage):
     """
     # the loss of the network on the cross validation set
     loss = cross_validation_error(self.valid_dataset, network, self.criterion)
-    print(loss)
 
     # Use GPU optimization if available
     if torch.cuda.is_available():
@@ -154,57 +156,34 @@ def optimal_brain_surgeon_layer_wise(self, network, percentage):
     :param percentage:  What percentage of the weights should be pruned.
     :param self:        The strategy pattern object the method is attached to.
     """
-    prune_goal = (get_network_weight_count(network) * percentage) / 100
-    prune_done = 0
-    print(prune_goal)
-    # todo: implement
-    exit()
+    out_dir = './out/hessian'
+    if not os.path.exists(out_dir):
+        os.mkdir(out_dir)
+        os.mkdir(out_dir + '/layerinput')
+        os.mkdir(out_dir + '/inverse')
 
-    """
-    # calculate the hessian inverse for every layer and save it to a file
-    for layer in get_single_pruning_layer(network):
-        layer_name = layer.__name__
-        n_hessian_batch_used = 1
-        hessian_batch_size = 1
-        use_Woodbury_tfbackend = True
-        stride_factor = 1
-        # todo: loss should be a parameter of ths function
-        hessian_inv = generate_hessian_inv_woodbury(net=network,
-                                                    trainloader=self.valid_dataset,
-                                                    layer_name=layer_name,
-                                                    layer_type='F',
-                                                    n_batch_used=n_hessian_batch_used,
-                                                    batch_size=hessian_batch_size,
-                                                    use_tf_backend=use_Woodbury_tfbackend,
-                                                    stride_factor=stride_factor,
-                                                    use_cuda=False)
+    layer_input_path = out_dir + '/layerinput/'
 
-        np.save('%s/%s.npy' % ('./out/hessian/', layer_name), hessian_inv)
+    # generate the input in the layers and save it for every batch
+    keep_input_layerwise(network)
+    for i, (images, labels) in enumerate(self.valid_dataset):
+        images = images.reshape(-1, 28 * 28)
+        network(images)
+        for name, layer in get_single_pruning_layer_with_name(network):
+            layer_input = layer.layer_input.data.numpy()
+            path = layer_input_path + name + '/'
+            if not os.path.exists(path):
+                os.mkdir(path)
 
-        weight = layer.get_weight().data.numpy()
-        bias = layer.bias.data.numpy()
-        wb = np.hstack([weight, bias.reshape(-1, 1)]).transpose()
-        l1, l2 = wb.shape
+            np.save(path + 'layerinput-' + str(i), layer_input)
 
-        L = np.zeros([l1 * l2])
-        for row_idx in range(l1):
-            for col_idx in range(l2):
-                L[row_idx * l2 + col_idx] = np.power(wb[row_idx, col_idx], 2) / (hessian_inv[row_idx, row_idx] + 10e-6)
+    hessian_inverse_path = out_dir + '/inverse/'
 
-        sen_rank = np.argsort(L)
-        n_prune = l1 * l2
-        mask = layer.get_mask().numpy()
+    # generate the hessian matrix for each layer
+    for name, layer in get_single_pruning_layer_with_name(network):
+        hessian_inverse_location = hessian_inverse_path + name
+        generate_hessian_inverse_fc(layer, hessian_inverse_location, layer_input_path + name)
 
-        for i in range(n_prune):
-            prune_idx = sen_rank[i]
-            prune_row_idx = prune_idx / l2
-            prune_col_idx = prune_idx % l2
-            delta_W = - wb[prune_row_idx, prune_col_idx] / (
-                    hessian_inv[prune_row_idx, prune_row_idx] + 10e-6) * hessian_inv[:, prune_row_idx]
-            wb[:, prune_col_idx] += delta_W
-            mask[prune_row_idx, prune_col_idx] = 0
-            # wb = np.multiply(wb, mask)
-    """
 
 
 #

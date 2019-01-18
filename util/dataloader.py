@@ -4,11 +4,13 @@ from torchvision import datasets, transforms
 from torch.utils.data.sampler import SubsetRandomSampler
 
 
-def get_train_valid_dataset(validation_split=0.3):
+def get_train_valid_dataset(validation_split=0.3, train_batch=64, valid_batch=None):
     """
     Creates a trainings and cross-validation dataset out of the original train dataset.
 
-    :param validation_split:  The validation split as a percentage number in the range [0, 1].
+    :param validation_split:    The validation split as a percentage number in the range [0, 1].
+    :param train_batch:         The size of each training set batch.
+    :param valid_batch:         The size of each validation set batch.
     :return: train_dataset: The dataset that is used for training of the network.
     :return: valid_dataset: The dataset that is used for the cross validation in the network.
     """
@@ -34,9 +36,14 @@ def get_train_valid_dataset(validation_split=0.3):
     train_sampler = SubsetRandomSampler(train_indices)
     valid_sampler = SubsetRandomSampler(val_indices)
 
+    if valid_batch is None:
+        btx = split
+    else:
+        btx = valid_batch
+
     # create loader for train and validation sets
-    train_loader = torch.utils.data.DataLoader(dataset, batch_size=64, sampler=train_sampler)
-    validation_loader = torch.utils.data.DataLoader(dataset, batch_size=split, sampler=valid_sampler)
+    train_loader = torch.utils.data.DataLoader(dataset, batch_size=train_batch, sampler=train_sampler)
+    validation_loader = torch.utils.data.DataLoader(dataset, batch_size=btx, sampler=valid_sampler)
 
     return train_loader, validation_loader
 
