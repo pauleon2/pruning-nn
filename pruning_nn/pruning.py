@@ -4,7 +4,8 @@ import numpy as np
 from torch.autograd import grad
 from pruning_nn.util import get_single_pruning_layer, get_network_weight_count, prune_layer_by_saliency, \
     prune_network_by_saliency, generate_hessian_inverse_fc, edge_cut, keep_input_layerwise, \
-    get_single_pruning_layer_with_name
+    get_single_pruning_layer_with_name, net_trim_solver, get_layer_count, get_weight_distribution, \
+    find_network_threshold
 from util.learning import cross_validation_error
 
 
@@ -226,12 +227,19 @@ def magnitude_class_distributed(self, network, percentage):
     This idea comes from the paper 'Learning both Weights and Connections for Efficient Neural Networks'
     (arXiv:1506.02626v3). The main idea is that in each layer respectively to the standard derivation many elements
     should be deleted.
+    The individual layers can be viewed as random variables ands since they are independent the following equation
+    holds: Var(X_1 + X_2) = Var(X_1) + Var(X_2)
 
     :param network:     The network that should be pruned.
     :param percentage:  The number of elements that should be pruned.
     :return:
     """
-    t = 0  # todo: the real problem here is how to determine the value t
+    # calculate t with the formula above
+    std = get_weight_distribution(network).std()
+    net_thres = find_network_threshold(network, percentage)
+    t = net_thres/std
+
+    # prune from each layer the according number of elements
     for layer in get_single_pruning_layer(network):
         th = layer.get_weight().data.std() * t
         layer.set_mask(torch.ge(layer.get_saliency(), th).float())
@@ -252,4 +260,5 @@ def gradient_magnitude(self, network, percentage):
     :param percentage:  The percentage of elements that should be pruned from the network.
     :param loss:        The overall loss of the network on the cross-validation set.
     """
+    # todo: evaluate if implementation effort is worth it...
     pass

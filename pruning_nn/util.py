@@ -78,20 +78,8 @@ def prune_network_by_saliency(network, percentage):
     :param percentage:  The percentage of weights that should be pruned.
     :return: The calculated threshold.
     """
-    all_sal = []
-    for layer in get_single_pruning_layer(network):
-        # flatten both weights and mask
-        mask = list(layer.get_mask().abs().numpy().flatten())
-        saliency = list(layer.get_saliency().numpy().flatten())
-
-        # zip, filter, unzip the two lists
-        mask, filtered_saliency = zip(
-            *((masked_val, weight_val) for masked_val, weight_val in zip(mask, saliency) if masked_val == 1))
-        # add all saliencies to list
-        all_sal += filtered_saliency
-
-    # calculate percentile
-    th = np.percentile(np.array(all_sal), percentage)
+    # calculate the network's threshold
+    th = find_network_threshold(network, percentage)
 
     # set the mask
     for layer in get_single_pruning_layer(network):
@@ -108,6 +96,23 @@ def prune_layer_by_saliency(network, percentage):
             *((masked_val, weight_val) for masked_val, weight_val in zip(mask, saliency) if masked_val == 1))
         th = np.percentile(np.array(filtered_saliency), percentage)
         layer.set_mask(torch.ge(layer.get_saliency(), th).float())
+
+
+def find_network_threshold(network, percentage):
+    all_sal = []
+    for layer in get_single_pruning_layer(network):
+        # flatten both weights and mask
+        mask = list(layer.get_mask().abs().numpy().flatten())
+        saliency = list(layer.get_saliency().numpy().flatten())
+
+        # zip, filter, unzip the two lists
+        mask, filtered_saliency = zip(
+            *((masked_val, weight_val) for masked_val, weight_val in zip(mask, saliency) if masked_val == 1))
+        # add all saliencies to list
+        all_sal += filtered_saliency
+
+    # calculate percentile
+    return np.percentile(np.array(all_sal), percentage)
 
 
 def get_single_pruning_layer(network):
@@ -132,7 +137,8 @@ def get_weight_distribution(network):
             *((masked_val, weight_val) for masked_val, weight_val in zip(mask, weights) if masked_val == 1))
 
         all_weights += list(filtered_weights)
-    return pd.DataFrame(data=all_weights)
+    # todo : check if this works
+    return np.array(all_weights)
 
 
 def get_network_weight_count(network):
