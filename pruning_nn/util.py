@@ -137,7 +137,8 @@ def get_weight_distribution(network):
             *((masked_val, weight_val) for masked_val, weight_val in zip(mask, weights) if masked_val == 1))
 
         all_weights += list(filtered_weights)
-    # todo : check if this works
+
+    # return all the weights, that are not masked as a numpy array
     return np.array(all_weights)
 
 

@@ -8,7 +8,7 @@ import pandas as pd
 from pruning_nn.network import NeuralNetwork, MultiLayerNeuralNetwork
 from pruning_nn.util import get_network_weight_count
 from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_class_blinded, magnitude_class_uniform, \
-    random_pruning, optimal_brain_damage
+    random_pruning, optimal_brain_damage, optimal_brain_surgeon_layer_wise, net_trim
 from util.learning import train, test, cross_validation_error
 from util.dataloader import get_train_valid_dataset, get_test_dataset
 
@@ -66,15 +66,15 @@ def train_network(filename='model', multi_layer=False):
     logging.info('Saved pre-trained model to ' + model_folder + filename)
 
 
-def prune_network(prune_strategy, filename='model', runs=1):
+def prune_network(prune_strategy, filename='model', runs=1, save_models=False):
     # setup variables for pruning
-    pruning_rates = [10, 25, 50, 60, 70]  # experiment for 10, 15 and 25 percent of the weights each step.
+    pruning_rates = [60, 50, 40]  # experiment for 10, 15 and 25 percent of the weights each step.
 
     # prune using strategy
     strategy = PruneNeuralNetStrategy(prune_strategy)
     if strategy.requires_loss():
         # if optimal brain damage is used get dataset with only one batch
-        if prune_strategy is optimal_brain_damage:
+        if prune_strategy in [optimal_brain_damage, net_trim]:
             btx = None
         else:
             btx = 100
@@ -84,6 +84,10 @@ def prune_network(prune_strategy, filename='model', runs=1):
     # output variables
     out_name = result_folder + str(prune_strategy.__name__) + '-' + filename
     s = pd.DataFrame(columns=['run', 'accuracy', 'pruning_perc', 'number_of_weights', 'pruning_method'])
+
+    # set variables for the best models with initial values
+    best_acc = 0
+    smallest_model = 30000
 
     # prune with different pruning rates
     for rate in pruning_rates:
@@ -131,9 +135,20 @@ def prune_network(prune_strategy, filename='model', runs=1):
                     final_acc = test(test_set, model)
                     retrain_change = 0
 
-                # todo: save the two best models with the following criterion:
+                # Save the best models with the following criterion
                 # 1. smallest weight count with max 1% accuracy drop from the original model.
                 # 2. best performing model overall with at least a compression rate of 50%.
+                if save_models and (
+                        (original_acc - final_acc < 1 and get_network_weight_count(model) < smallest_model) or (
+                        get_network_weight_count(model) <= original_weight_count / 2 and final_acc > best_acc)):
+                    # set the values to the new ones
+                    best_acc = final_acc if final_acc > best_acc else best_acc
+                    model_size = int(get_network_weight_count(model))
+                    smallest_model = model_size if model_size < smallest_model else smallest_model
+
+                    # save the model
+                    torch.save(model, out_name + '-rate{}-weight{}-per{}.pt'
+                               .format(str(rate), str(model_size), str(final_acc)))
 
                 # evaluate duration of process
                 time_needed = time.time() - start
