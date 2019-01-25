@@ -26,6 +26,7 @@ model_folder = './out/model/'
 
 test_set = get_test_dataset()
 train_set, valid_set = get_train_valid_dataset(valid_batch=100)
+loss_func = nn.CrossEntropyLoss()
 
 
 def setup():
@@ -40,10 +41,9 @@ def setup():
 
 
 def setup_training(model):
-    loss_func = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=hyper_params['learning_rate'],
                                 momentum=hyper_params['momentum'])
-    return loss_func, optimizer
+    return optimizer
 
 
 def train_network(filename='model', multi_layer=False):
@@ -54,11 +54,11 @@ def train_network(filename='model', multi_layer=False):
 
     # Criterion and optimizer
     # might actually use MSE Error
-    criterion, optimizer = setup_training(model)
+    optimizer = setup_training(model)
 
     # train and test the network
     for epoch in range(hyper_params['num_epochs']):
-        train(train_set, model, optimizer, criterion)
+        train(train_set, model, optimizer, loss_func)
         # test(test_loader, model)
 
     # save the current model
@@ -79,13 +79,13 @@ def prune_network(prune_strategy, filename='model', runs=1, save_models=False):
         else:
             btx = 100
         _, strategy.valid_dataset = get_train_valid_dataset(valid_batch=btx)
-        strategy.criterion = nn.CrossEntropyLoss()  # todo: put in own method maybe
+        strategy.criterion = loss_func
 
     # output variables
     out_name = result_folder + str(prune_strategy.__name__) + '-' + filename
     s = pd.DataFrame(columns=['run', 'accuracy', 'pruning_perc', 'number_of_weights', 'pruning_method'])
 
-    # set variables for the best models with initial values
+    # set variables for the best models with initial values.
     best_acc = 0
     smallest_model = 30000
 
@@ -100,7 +100,7 @@ def prune_network(prune_strategy, filename='model', runs=1, save_models=False):
             original_weight_count = get_network_weight_count(model)
 
             # loss and optimizer for the loaded model
-            criterion, optimizer = setup_training(model)
+            optimizer = setup_training(model)
 
             # prune as long as there are more than 500 elements in the network
             while get_network_weight_count(model).item() > 500:
@@ -117,7 +117,7 @@ def prune_network(prune_strategy, filename='model', runs=1, save_models=False):
                     retrain_epoch = 1
 
                     while retrain:
-                        train(train_set, model, optimizer, criterion)
+                        train(train_set, model, optimizer, loss_func)
                         new_acc = test(valid_set, model)
 
                         # stop retraining if the test accuracy imporves only slightly or the maximum number of
@@ -176,7 +176,6 @@ if __name__ == '__main__':
     logging.basicConfig(filename='out/myapp.log', level=logging.INFO, format='%(asctime)s %(message)s')
 
     # train_network()
-    prune_network(magnitude_class_blinded)
 
     # train the model
     for j in range(8):
