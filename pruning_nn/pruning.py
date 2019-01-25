@@ -19,20 +19,25 @@ class PruneNeuralNetStrategy:
         <li>Random Pruning</li>
         <li>Magnitude Pruning Blinded</li>
         <li>Magnitude Pruning Uniform</li>
+        <li>Magnitude Pruning Distribution</li>
         <li>Optimal Brain Damage</li>
     </ul>
 
-    The following strategies will e implemented in the future
-
+    The following algorithms are currently under construction:
     <ul>
-        <li>Optimal Brain Surgeon</li>
         <li>Layer-wise Optimal Brain Surgeon</li>
+        <li>Net Trim</li>
     </ul>
 
     Optionally the following will be implemented:
     <ul>
-        <li>Magnitude Pruning Distribution</li>
         <li>Gradient Magnitude Pruning</li>
+        <li>Improved OBS</li>
+    </ul>
+
+    Method that were considered but due to inefficiency not implemented:
+    <ul>
+        <li>Optimal Brain Surgeon</li>
     </ul>
 
     All methods except of the random pruning and magnitude based pruning require the loss argument. In order to
@@ -130,28 +135,16 @@ def optimal_brain_damage(self, network, percentage):
 
 
 def optimal_brain_surgeon(self, network, percentage):
-    # enable keeping of original inputs of the network
-    network.keep_layer_input = True
-
-    # calculate the loss of the network
-    loss = cross_validation_error(self.valid_dataset, network, self.criterion)
-
-    prune_goal = (get_network_weight_count(network) * percentage) / 100
-    prune_done = 0
-    print(prune_goal)
-
-    while prune_goal < prune_done:
-        # todo: implement obs
-        pass
+    raise NotImplementedError("It is not possible to implement obs in an efficient way")
 
 
+#
+# Layer-wise approaches
+#
 def optimal_brain_surgeon_layer_wise(self, network, percentage):
     """
     Layer-wise calculation of the inverse of the hessian matrix. Then the weights are ranked similar to the original
     optimal brian surgeon algorithm.
-
-    IMPORTANT: Since no retraining is required it is not important how many elements are pruned in each step. Since for
-    every single pruning element the complete inverse of the hessian will e calculated.
 
     :param network:     The network that should be pruned.
     :param percentage:  What percentage of the weights should be pruned.
@@ -163,6 +156,7 @@ def optimal_brain_surgeon_layer_wise(self, network, percentage):
         os.mkdir(out_dir + '/layerinput')
         os.mkdir(out_dir + '/inverse')
 
+    # where to put the cached layer inputs
     layer_input_path = out_dir + '/layerinput/'
 
     # generate the input in the layers and save it for every batch
@@ -178,6 +172,7 @@ def optimal_brain_surgeon_layer_wise(self, network, percentage):
 
             np.save(path + 'layerinput-' + str(i), layer_input)
 
+    # where to save the hessian matricies
     hessian_inverse_path = out_dir + '/inverse/'
 
     # generate the hessian matrix for each layer
@@ -185,6 +180,56 @@ def optimal_brain_surgeon_layer_wise(self, network, percentage):
         hessian_inverse_location = hessian_inverse_path + name
         generate_hessian_inverse_fc(layer, hessian_inverse_location, layer_input_path + name)
 
+    # prune the elements from the matrix
+    # todo: evaluate if this can be done in upper for-loop
+    for name, layer in get_single_pruning_layer_with_name(network):
+        edge_cut(layer, hessian_inverse_path + name + '.npy', percentage)
+
+
+def net_trim(self, network, percentage):
+    """
+    Implementation of the net trim algorithm
+
+    :param self:        The strategy object
+    :param network:     The network that should be pruned
+    :param percentage:  The percentage of elements that should be eliminated from the network
+    """
+    # Net-Trim parameters:
+    # number of loops inside GPU
+    unroll_number = 10
+    # number of loops outside the GPU
+    num_iterations = 30
+    # relative value of epsilon for Net-Trim
+    epsilon_gain = 0.15
+
+    keep_input_layerwise(network)
+    for i, (images, labels) in enumerate(self.valid_dataset):
+        images = images.reshape(-1, 28 * 28)
+        network(images)
+
+    total_layers = get_layer_count(network)
+    for num, layer in enumerate(get_single_pruning_layer_with_name(network)):
+        layer_input = layer.layer_input
+        layer_output = layer.forward(layer_input)
+
+        num_samples = layer_input.size()[1]
+
+        X = np.concatenate([layer_input.transpose(), np.ones((1, num_samples))])  # input int the layer
+
+        # todo: check if works
+        Y = layer_output.transpose()
+
+        if num < total_layers - 1:
+            # ReLU layer, use net-trim
+            V = np.zeros(Y.shape)  # the new output of the network
+        else:
+            # use sparse least-squares (for softmax, ignore the activation function)
+            V = None
+
+        norm_Y = np.linalg.norm(Y)
+        epsilon = epsilon_gain * norm_Y
+
+        net_trim_solver(X, Y, V, epsilon, rho=1)
 
 
 #
@@ -197,7 +242,6 @@ def random_pruning(self, network, percentage):
 
     # prune the percentage% weights with the smallest random saliency
     prune_network_by_saliency(network, percentage)
-    print(get_network_weight_count(network))
 
 
 #
@@ -256,9 +300,9 @@ def gradient_magnitude(self, network, percentage):
     The main idea is to delete weights with a small magnitude and a proportionally high gradient. Meaning their slope is
     relatively high.
 
+    :param self:        The strategy pattern object this method belongs to.
     :param network:     The network that should be pruned.
     :param percentage:  The percentage of elements that should be pruned from the network.
-    :param loss:        The overall loss of the network on the cross-validation set.
     """
     # todo: evaluate if implementation effort is worth it...
     pass
