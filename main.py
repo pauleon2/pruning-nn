@@ -25,7 +25,7 @@ result_folder = './out/result/'
 model_folder = './out/model/'
 
 test_set = get_test_dataset()
-train_set, valid_set = get_train_valid_dataset()
+train_set, valid_set = get_train_valid_dataset(valid_batch=100)
 
 
 def setup():
@@ -73,7 +73,12 @@ def prune_network(prune_strategy, filename='model', runs=1):
     # prune using strategy
     strategy = PruneNeuralNetStrategy(prune_strategy)
     if strategy.requires_loss():
-        _, strategy.valid_dataset = get_train_valid_dataset()
+        # if optimal brain damage is used get dataset with only one batch
+        if prune_strategy is optimal_brain_damage:
+            btx = None
+        else:
+            btx = 100
+        _, strategy.valid_dataset = get_train_valid_dataset(valid_batch=btx)
         strategy.criterion = nn.CrossEntropyLoss()  # todo: put in own method maybe
 
     # output variables
@@ -100,7 +105,8 @@ def prune_network(prune_strategy, filename='model', runs=1):
 
                 # Retrain and reevaluate the process
                 if strategy.require_retraining():
-                    untrained_acc = test(test_set, model)
+                    untrained_test_acc = test(test_set, model)
+                    untrained_acc = test(valid_set, model)
                     # setup variables for loop retraining
                     prev_acc = untrained_acc
                     retrain = True
@@ -108,7 +114,7 @@ def prune_network(prune_strategy, filename='model', runs=1):
 
                     while retrain:
                         train(train_set, model, optimizer, criterion)
-                        new_acc = test(test_set, model)
+                        new_acc = test(valid_set, model)
 
                         # stop retraining if the test accuracy imporves only slightly or the maximum number of
                         # retrainnig epochs is reached
@@ -119,7 +125,7 @@ def prune_network(prune_strategy, filename='model', runs=1):
                             prev_acc = new_acc
 
                     final_acc = test(test_set, model)
-                    retrain_change = final_acc - untrained_acc
+                    retrain_change = final_acc - untrained_test_acc
                 else:
                     retrain_epoch = 0
                     final_acc = test(test_set, model)

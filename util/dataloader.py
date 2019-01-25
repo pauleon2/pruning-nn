@@ -4,11 +4,11 @@ from torchvision import datasets, transforms
 from torch.utils.data.sampler import SubsetRandomSampler
 
 
-def get_train_valid_dataset(validation_split=0.3, train_batch=64, valid_batch=None):
+def get_train_valid_dataset(train_batch=64, valid_batch=None):
     """
-    Creates a trainings and cross-validation dataset out of the original train dataset.
+    Creates a trainings and cross-validation dataset out of the original train dataset. The validation set contains
+    10,000 images and the test set contains 50,000 images.
 
-    :param validation_split:    The validation split as a percentage number in the range [0, 1].
     :param train_batch:         The size of each training set batch.
     :param valid_batch:         The size of each validation set batch.
     :return: train_dataset: The dataset that is used for training of the network.
@@ -25,7 +25,7 @@ def get_train_valid_dataset(validation_split=0.3, train_batch=64, valid_batch=No
     # Creating data indices for training and validation splits:
     dataset_size = len(dataset)
     indices = list(range(dataset_size))
-    split = int(np.floor(validation_split * dataset_size))
+    split = 10000
 
     # shuffle dataset
     np.random.seed(0)
