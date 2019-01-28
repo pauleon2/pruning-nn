@@ -74,7 +74,6 @@ def cross_validation_error(data_set, model, criterion):
     """
 
     loss = 0
-    print("Calculate the loss for the cross validation set")
     for (images, labels) in data_set:
         images = images.reshape(-1, 28 * 28)
         outputs = model(images)

@@ -8,7 +8,7 @@ import pandas as pd
 from pruning_nn.network import NeuralNetwork, MultiLayerNeuralNetwork
 from pruning_nn.util import get_network_weight_count
 from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_class_blinded, magnitude_class_uniform, \
-    random_pruning, optimal_brain_damage, optimal_brain_surgeon_layer_wise, net_trim
+    random_pruning, optimal_brain_damage, optimal_brain_surgeon_layer_wise, net_trim, magnitude_class_distributed
 from util.learning import train, test, cross_validation_error
 from util.dataloader import get_train_valid_dataset, get_test_dataset
 
@@ -66,9 +66,9 @@ def train_network(filename='model', multi_layer=False):
     logging.info('Saved pre-trained model to ' + model_folder + filename)
 
 
-def prune_network(prune_strategy, filename='model', runs=1, save_models=False):
+def prune_network(prune_strategy, filename='model', runs=1, save=False):
     # setup variables for pruning
-    pruning_rates = [60, 50, 40]  # experiment for 10, 15 and 25 percent of the weights each step.
+    pruning_rates = [70, 60, 50, 40, 25]  # experiment for 10, 15 and 25 percent of the weights each step.
 
     # prune using strategy
     strategy = PruneNeuralNetStrategy(prune_strategy)
@@ -138,7 +138,7 @@ def prune_network(prune_strategy, filename='model', runs=1, save_models=False):
                 # Save the best models with the following criterion
                 # 1. smallest weight count with max 1% accuracy drop from the original model.
                 # 2. best performing model overall with at least a compression rate of 50%.
-                if save_models and (
+                if save and (
                         (original_acc - final_acc < 1 and get_network_weight_count(model) < smallest_model) or (
                         get_network_weight_count(model) <= original_weight_count / 2 and final_acc > best_acc)):
                     # set the values to the new ones
@@ -178,12 +178,13 @@ if __name__ == '__main__':
     # train_network()
 
     # train the model
-    for j in range(8):
+    for j in range(4):
         name = 'model' + str(j)
-        multi = j >= 4
+        save_models = j == 0
 
-        train_network(filename=name, multi_layer=multi)
+        train_network(filename=name)
 
         # prune with percentage p
-        for strat in [random_pruning, magnitude_class_blinded, magnitude_class_uniform]:
-            prune_network(prune_strategy=strat, filename=name, runs=25)
+        for strat in [random_pruning, magnitude_class_blinded, magnitude_class_uniform, magnitude_class_distributed]:
+            prune_network(prune_strategy=strat, filename=name, runs=25, save=save_models)
+

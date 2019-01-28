@@ -43,9 +43,11 @@ def generate_hessian_inverse_fc(layer, hessian_inverse_path, layer_input_train_d
             hessian_inverse = hessian_inverse - numerator * (1.00 / denominator)
 
         if input_index % 100 == 0:
+            # todo: remove
             print('[%s] Finish processing batch %s' % (datetime.now(), input_index))
 
     np.save(hessian_inverse_path, hessian_inverse)
+    # todo: remove
     print('[%s]Hessian Inverse Done!' % (datetime.now()))
 
 
@@ -68,6 +70,7 @@ def edge_cut(layer, hessian_inverse_path, cut_ratio):
     sensitivity = np.array([])
 
     hessian_inverse = np.load(hessian_inverse_path)
+    # todo: remove
     print('[%s] Hessian Inverse Done!' % datetime.now())
 
     gate_w = layer.get_mask().data.numpy()
@@ -75,6 +78,7 @@ def edge_cut(layer, hessian_inverse_path, cut_ratio):
 
     # calculate number of pruneable elements
     max_pruned_num = int(layer.get_weight_count() * cut_ratio)  # todo: make sure this is exactly the same as percentage
+    # todo: remove
     print('[%s] Max prune number : %d' % (datetime.now(), max_pruned_num))
 
     # Calcuate sensitivity score. Refer to Eq.5.
@@ -83,6 +87,7 @@ def edge_cut(layer, hessian_inverse_path, cut_ratio):
             (sensitivity, 0.5 * ((w_layer.T[i] ** 2) / np.diag(hessian_inverse))))
     sorted_index = np.argsort(sensitivity)
 
+    # todo: remove x2
     print('[%s] Sorted index generate completed.' % datetime.now())
     print('[%s] Starting Pruning!' % datetime.now())
     hessian_inverseT = hessian_inverse.T
@@ -105,11 +110,13 @@ def edge_cut(layer, hessian_inverse_path, cut_ratio):
         # b_layer = b_layer * gate_b
 
         if prune_count == max_pruned_num:
+            # todo: remove
             print('[%s] Have prune required weights' % datetime.now())
             break
 
     # print 'Non-zeros: %d' %np.count_nonzero(w_layer)
     # print 'weights number: %d' %w_layer.size
+    # todo: remove
     print('[%s] Prune Finish. compression ratio: %.3f' % (
         datetime.now(), 1 - (float(np.count_nonzero(w_layer)) / w_layer.size)))
 
@@ -204,6 +211,7 @@ def net_trim_solver(X: np.ndarray, Y: np.ndarray, V, epsilon, rho, max_iteration
             break
 
         if cnt % 500 == 0:
+            # todo: remove
             print('{0} : {1:3.6f}'.format(cnt, np.linalg.norm(W3 - W_prev)), flush=True)
 
     # ultimately, W2 and W3 would be the same
@@ -266,6 +274,7 @@ def sparse_least_squares_solver(X: np.ndarray, Y: np.ndarray, epsilon, rho, max_
             break
 
         if cnt % 500 == 0:
+            # todo: remove
             print('{0} : {1:3.6f}'.format(cnt, np.linalg.norm(W3 - W_prev)), flush=True)
 
     # ultimately, W2 and W3 would be the same
