@@ -333,6 +333,15 @@ def find_network_threshold(network, percentage):
     return np.percentile(np.array(all_sal), percentage)
 
 
+def get_filtered_saliency(saliency, mask):
+    s = list(saliency)
+    m = list(mask)
+
+    _, filtered_w = zip(
+            *((masked_val, weight_val) for masked_val, weight_val in zip(m, s) if masked_val == 1))
+    return filtered_w
+
+
 def get_single_pruning_layer(network):
     for child in network.children():
         if type(child) == MaskedLinearLayer:

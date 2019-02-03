@@ -5,7 +5,7 @@ from torch.autograd import grad
 from pruning_nn.util import get_single_pruning_layer, get_network_weight_count, prune_layer_by_saliency, \
     prune_network_by_saliency, generate_hessian_inverse_fc, edge_cut, keep_input_layerwise, \
     get_single_pruning_layer_with_name, net_trim_solver, get_layer_count, get_weight_distribution, \
-    find_network_threshold
+    find_network_threshold, get_filtered_saliency
 from util.learning import cross_validation_error
 
 
@@ -19,19 +19,18 @@ class PruneNeuralNetStrategy:
         <li>Random Pruning</li>
         <li>Magnitude Pruning Blinded</li>
         <li>Magnitude Pruning Uniform</li>
-        <li>Magnitude Pruning Distribution</li>
         <li>Optimal Brain Damage</li>
     </ul>
 
     The following algorithms are currently under construction:
     <ul>
+        <li>Magnitude Pruning Distribution</li>
         <li>Layer-wise Optimal Brain Surgeon</li>
         <li>Net Trim</li>
     </ul>
 
     Optionally the following will be implemented:
     <ul>
-        <li>Gradient Magnitude Pruning</li>
         <li>Improved OBS</li>
     </ul>
 
@@ -74,15 +73,14 @@ class PruneNeuralNetStrategy:
         Check if the current pruning method needs the network's loss as an argument.
         :return: True iff a gradient of the network is required.
         """
-        return self.prune_strategy in [optimal_brain_damage, gradient_magnitude, optimal_brain_surgeon,
-                                       optimal_brain_surgeon_layer_wise]
+        return self.prune_strategy in [optimal_brain_damage, optimal_brain_surgeon_layer_wise]
 
     def require_retraining(self):
         """
         Check if the current pruning strategy requires a retraining after the pruning is done
         :return: True iff the retraining is required.
         """
-        return self.prune_strategy not in [optimal_brain_surgeon, optimal_brain_surgeon_layer_wise]
+        return self.prune_strategy not in [optimal_brain_surgeon_layer_wise]
 
 
 #
@@ -132,10 +130,6 @@ def optimal_brain_damage(self, network, percentage):
 
     # prune the elements with the lowest saliency in the network
     prune_network_by_saliency(network, percentage)
-
-
-def optimal_brain_surgeon(self, network, percentage):
-    raise NotImplementedError("It is not possible to implement obs in an efficient way")
 
 
 #
