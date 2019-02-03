@@ -6,7 +6,7 @@ import torch.nn as nn
 import pandas as pd
 
 from pruning_nn.network import NeuralNetwork, MultiLayerNeuralNetwork
-from pruning_nn.util import get_network_weight_count
+from pruning_nn.util import get_network_weight_count, reset_pruned_network, get_single_pruning_layer_with_name
 from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_class_blinded, magnitude_class_uniform, \
     random_pruning, optimal_brain_damage, optimal_brain_surgeon_layer_wise, net_trim, magnitude_class_distributed
 from util.learning import train, test, cross_validation_error
@@ -64,6 +64,29 @@ def train_network(filename='model', multi_layer=False):
     # save the current model
     torch.save(model, model_folder + filename + '.pt')
     logging.info('Saved pre-trained model to ' + model_folder + filename)
+
+
+def train_sparse_model(filename='model', save=False):
+    model = torch.load(result_folder + filename + '.pt')
+    pruned_acc = test(test_set, model)
+    optimizer = setup_training(model)
+
+    s = pd.DataFrame(columns=['epoch', 'test_acc'])
+    s = s.append({'epoch': -1, 'test_acc': pruned_acc}, ignore_index=True)
+
+    # todo: use early stopping or something else to stop training for this particular model
+    for epoch in range(hyper_params['num_epochs']):
+        train(train_set, model, optimizer, loss_func)
+        tr = test(test_set, model)
+        s = s.append({'epoch': epoch, 'test_acc': tr}, ignore_index=True)
+        print(epoch, tr)
+
+    final_acc = test(test_set, model)
+    print(pruned_acc, final_acc)
+
+    s.to_pickle(result_folder + filename + '-scatch.pkl')
+    if save:
+        torch.save(model, result_folder + filename + '-scratch.pt')
 
 
 def prune_network(prune_strategy, filename='model', runs=1, save=False):
@@ -185,6 +208,6 @@ if __name__ == '__main__':
         train_network(filename=name)
 
         # prune with percentage p
-        for strat in [random_pruning, magnitude_class_blinded, magnitude_class_uniform, magnitude_class_distributed]:
+        for strat in [random_pruning, magnitude_class_blinded, magnitude_class_uniform]:
             prune_network(prune_strategy=strat, filename=name, runs=25, save=save_models)
 
