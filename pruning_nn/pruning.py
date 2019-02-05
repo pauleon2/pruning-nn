@@ -265,38 +265,25 @@ def magnitude_class_distributed(self, network, percentage):
     This idea comes from the paper 'Learning both Weights and Connections for Efficient Neural Networks'
     (arXiv:1506.02626v3). The main idea is that in each layer respectively to the standard derivation many elements
     should be deleted.
-    The individual layers can be viewed as random variables ands since they are independent the following equation
-    holds: Var(X_1 + X_2) = Var(X_1) + Var(X_2)
+    For each layer prune the weights w for which the following holds:
+
+    std(layer weights) * t > w      This is equal to the following
+    t > w/std(layer_weights)        Since std is e(x - e(x))^2 and as square number positive.
+
+    So all elements for which the wright divided by the std. derivation is smaller than some threshold will get deleted
 
     :param network:     The network that should be pruned.
     :param percentage:  The number of elements that should be pruned.
     :return:
     """
-    # calculate t with the formula above
-    std = get_weight_distribution(network).std()
-    net_thres = find_network_threshold(network, percentage)
-    t = net_thres/std
 
     # prune from each layer the according number of elements
     for layer in get_single_pruning_layer(network):
-        th = layer.get_weight().data.std() * t
-        layer.set_mask(torch.ge(layer.get_saliency(), th).float())
+        # calculate standard deviation for the layer
+        w = layer.get_weight().data
+        st_v = 1 / w.std()
+        # set the saliency in the layer = weight/st.deviation
+        layer.set_saliency(st_v * w)
 
-
-#
-# Gradient based pruning
-#
-def gradient_magnitude(self, network, percentage):
-    """
-    Saliency measure based on the first order derivative i.e. the gradient of the weight. This idea is adapted from the
-    paper 'Pruning CNN for Resource Efficient Interference' by Molchanov et.al who did this sort of pruning for
-    convolutional neural networks(arXiv:1611.06440v2).
-    The main idea is to delete weights with a small magnitude and a proportionally high gradient. Meaning their slope is
-    relatively high.
-
-    :param self:        The strategy pattern object this method belongs to.
-    :param network:     The network that should be pruned.
-    :param percentage:  The percentage of elements that should be pruned from the network.
-    """
-    # todo: evaluate if implementation effort is worth it...
-    pass
+    # prune network
+    prune_network_by_saliency(network, percentage)

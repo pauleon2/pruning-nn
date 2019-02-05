@@ -62,6 +62,9 @@ class MaskedLinearLayer(nn.Linear):
             return self.saliency
 
     def set_saliency(self, sal):
+        if not sal.size() == self.weight.size():
+            raise ValueError('mask must have same size as weight matrix')
+
         self.saliency = sal
 
     def get_mask(self):
