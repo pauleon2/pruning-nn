@@ -4,7 +4,7 @@ import numpy as np
 from torch.autograd import grad
 from pruning_nn.util import get_single_pruning_layer, get_network_weight_count, prune_layer_by_saliency, \
     prune_network_by_saliency, generate_hessian_inverse_fc, edge_cut, keep_input_layerwise, \
-    get_single_pruning_layer_with_name, net_trim_solver, get_layer_count, get_weight_distribution, \
+    get_single_pruning_layer_with_name, get_layer_count, get_weight_distribution, \
     find_network_threshold, get_filtered_saliency
 from util.learning import cross_validation_error
 
@@ -178,52 +178,6 @@ def optimal_brain_surgeon_layer_wise(self, network, percentage):
     # todo: evaluate if this can be done in upper for-loop
     for name, layer in get_single_pruning_layer_with_name(network):
         edge_cut(layer, hessian_inverse_path + name + '.npy', percentage)
-
-
-def net_trim(self, network, percentage):
-    """
-    Implementation of the net trim algorithm
-
-    :param self:        The strategy object
-    :param network:     The network that should be pruned
-    :param percentage:  The percentage of elements that should be eliminated from the network
-    """
-    # Net-Trim parameters:
-    # number of loops inside GPU
-    unroll_number = 10
-    # number of loops outside the GPU
-    num_iterations = 30
-    # relative value of epsilon for Net-Trim
-    epsilon_gain = 0.15
-
-    keep_input_layerwise(network)
-    for i, (images, labels) in enumerate(self.valid_dataset):
-        images = images.reshape(-1, 28 * 28)
-        network(images)
-
-    total_layers = get_layer_count(network)
-    for num, layer in enumerate(get_single_pruning_layer_with_name(network)):
-        layer_input = layer.layer_input
-        layer_output = layer.forward(layer_input)
-
-        num_samples = layer_input.size()[1]
-
-        X = np.concatenate([layer_input.transpose(), np.ones((1, num_samples))])  # input int the layer
-
-        # todo: check if works
-        Y = layer_output.transpose()
-
-        if num < total_layers - 1:
-            # ReLU layer, use net-trim
-            V = np.zeros(Y.shape)  # the new output of the network
-        else:
-            # use sparse least-squares (for softmax, ignore the activation function)
-            V = None
-
-        norm_Y = np.linalg.norm(Y)
-        epsilon = epsilon_gain * norm_Y
-
-        net_trim_solver(X, Y, V, epsilon, rho=1)
 
 
 #

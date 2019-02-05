@@ -8,15 +8,16 @@ import pandas as pd
 from pruning_nn.network import NeuralNetwork, MultiLayerNeuralNetwork
 from pruning_nn.util import get_network_weight_count, reset_pruned_network, get_single_pruning_layer_with_name
 from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_class_blinded, magnitude_class_uniform, \
-    random_pruning, optimal_brain_damage, optimal_brain_surgeon_layer_wise, net_trim, magnitude_class_distributed
+    random_pruning, optimal_brain_damage, optimal_brain_surgeon_layer_wise, magnitude_class_distributed
 from util.learning import train, test, cross_validation_error
 from util.dataloader import get_train_valid_dataset, get_test_dataset
+from util.helper import transfer_old_model_to_new
 
 # constant variables
 hyper_params = {
     'num_retrain_epochs': 2,
     'max_retrain_epochs': 10,
-    'num_epochs': 20,
+    'num_epochs': 200,
     'learning_rate': 0.01,
     'momentum': 0
 }
@@ -57,9 +58,31 @@ def train_network(filename='model', multi_layer=False):
     optimizer = setup_training(model)
 
     # train and test the network
-    for epoch in range(hyper_params['num_epochs']):
+    t = True
+    epoch = 0
+    prev_acc = 0
+
+    while t and epoch < hyper_params['num_epochs']:
         train(train_set, model, optimizer, loss_func)
-        # test(test_loader, model)
+        new_acc = test(valid_set, model)
+
+        if new_acc - prev_acc < 0.001:
+            if hyper_params['learning_rate'] > 0.0001:
+                # adjust learning rate
+                hyper_params['learning_rate'] = hyper_params['learning_rate'] * 0.1
+                print('Reach smaller learning rate ' + str(hyper_params['learning_rate']))
+            else:
+                # stop training
+                t = False
+
+        epoch += 1
+        prev_acc = new_acc
+        print(epoch, prev_acc)
+
+    acc = test(test_set, model)
+    print('Needed ' + str(epoch) + ' epochs to train model to accuracy: ' + str(acc))
+    # reset the learning rate for further training later
+    hyper_params['learning_rate'] = 0.01
 
     # save the current model
     torch.save(model, model_folder + filename + '.pt')
@@ -97,7 +120,7 @@ def prune_network(prune_strategy, filename='model', runs=1, save=False):
     strategy = PruneNeuralNetStrategy(prune_strategy)
     if strategy.requires_loss():
         # if optimal brain damage is used get dataset with only one batch
-        if prune_strategy in [optimal_brain_damage, net_trim]:
+        if prune_strategy in [optimal_brain_damage]:
             btx = None
         else:
             btx = 100
@@ -145,7 +168,7 @@ def prune_network(prune_strategy, filename='model', runs=1, save=False):
 
                         # stop retraining if the test accuracy imporves only slightly or the maximum number of
                         # retrainnig epochs is reached
-                        if new_acc - prev_acc < 0.01 or retrain_epoch >= hyper_params['num_retrain_epochs']:
+                        if new_acc - prev_acc < 0.01 or retrain_epoch >= hyper_params['max_retrain_epochs']:
                             retrain = False
                         else:
                             retrain_epoch += 1
