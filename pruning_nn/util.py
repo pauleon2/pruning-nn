@@ -1,4 +1,5 @@
 import os
+import math
 import torch
 import numpy as np
 from datetime import datetime
@@ -26,7 +27,7 @@ def generate_hessian_inverse_fc(layer, hessian_inverse_path, layer_input_train_d
     n_hidden_1 = w_layer.shape[0]
 
     # Here we use a recursive way to calculate hessian inverse
-    hessian_inverse = 1000000 * np.eye(n_hidden_1 + 1)
+    hessian_inverse = 1000000 * np.eye(n_hidden_1)
 
     dataset_size = 0
     for input_index, input_file in enumerate(os.listdir(layer_input_train_dir)):
@@ -36,9 +37,10 @@ def generate_hessian_inverse_fc(layer, hessian_inverse_path, layer_input_train_d
             dataset_size = layer2_input_train.shape[0] * len(os.listdir(layer_input_train_dir))
 
         for i in range(layer2_input_train.shape[0]):
-            vect_w_b = np.vstack((np.array([layer2_input_train[i]]).T, np.array([[1.0]])))
-            denominator = dataset_size + np.dot(np.dot(vect_w_b.T, hessian_inverse), vect_w_b)
-            numerator = np.dot(np.dot(hessian_inverse, vect_w_b), np.dot(vect_w_b.T, hessian_inverse))
+            # vect_w_b = np.vstack((np.array([layer2_input_train[i]]).T, np.array([[1.0]])))
+            vect_w = np.array([layer2_input_train[i]]).T
+            denominator = dataset_size + np.dot(np.dot(vect_w.T, hessian_inverse), vect_w)
+            numerator = np.dot(np.dot(hessian_inverse, vect_w), np.dot(vect_w.T, hessian_inverse))
             hessian_inverse = hessian_inverse - numerator * (1.00 / denominator)
 
         if input_index % 100 == 0:
@@ -58,9 +60,10 @@ def edge_cut(layer, hessian_inverse_path, cut_ratio):
     :param cut_ratio: The zeros percentage of weights and biases, or, 1 - compression ratio
     :return:
     """
+    cut_ratio = cut_ratio/100  # transfer percentage from full value to floating point
 
     # dataset_size = layer2_input_train.shape[0]
-    w_layer = layer.get_weight().data.numpy()
+    w_layer = layer.get_weight().data.numpy().T
 
     # biases = layer.bias.data.numpy()
     n_hidden_1 = w_layer.shape[0]
@@ -72,7 +75,7 @@ def edge_cut(layer, hessian_inverse_path, cut_ratio):
     # todo: remove
     print('[%s] Hessian Inverse Done!' % datetime.now())
 
-    gate_w = layer.get_mask().data.numpy()
+    gate_w = layer.get_mask().data.numpy().T
     # gate_b = np.ones([n_hidden_2])
 
     # calculate number of pruneable elements
@@ -94,15 +97,15 @@ def edge_cut(layer, hessian_inverse_path, cut_ratio):
     prune_count = 0
     for i in range(n_hidden_1 * n_hidden_2):
         prune_index = [sorted_index[i]]
-        x_index = prune_index[0] / (n_hidden_1 + 1)  # next layer num
-        y_index = prune_index[0] % (n_hidden_1 + 1)  # this layer num
+        x_index = math.floor(prune_index[0] / n_hidden_1)  # next layer num
+        y_index = prune_index[0] % n_hidden_1  # this layer num
 
         if gate_w[y_index][x_index] == 1:
             delta_w = (-w_layer[y_index][x_index] / hessian_inverse[y_index][y_index]) * hessian_inverseT[y_index]
             gate_w[y_index][x_index] = 0
             prune_count += 1
             # Parameters update, refer to Eq.5
-            w_layer.T[x_index] = w_layer.T[x_index] + delta_w[0:-1]
+            w_layer.T[x_index] = w_layer.T[x_index] + delta_w
             # b_layer[x_index] = b_layer[x_index] + delta_w[-1]
 
         w_layer = w_layer * gate_w
@@ -120,8 +123,8 @@ def edge_cut(layer, hessian_inverse_path, cut_ratio):
         datetime.now(), 1 - (float(np.count_nonzero(w_layer)) / w_layer.size)))
 
     # set created mask to network again and update the weights
-    layer.set_mask(torch.from_numpy(gate_w))
-    layer.weight = torch.from_numpy(w_layer)
+    layer.set_mask(torch.from_numpy(gate_w.T))
+    layer.weight = torch.nn.Parameter(torch.from_numpy(w_layer.T))
 
     # if not os.path.exists(prune_save_path):
     #    os.makedirs(prune_save_path)
@@ -152,7 +155,7 @@ def prune_network_by_saliency(network, percentage):
     for layer in get_single_pruning_layer(network):
         # All deleted weights should be set to zero so they should definetly be less than the threshold since this is
         # positive.
-        layer.set_mask(torch.ge(layer.get_saliency(), th).float())
+        layer.set_mask(torch.ge(layer.get_saliency(), th).float() * layer.get_mask())
 
 
 def prune_layer_by_saliency(network, percentage):
@@ -162,7 +165,7 @@ def prune_layer_by_saliency(network, percentage):
         mask, filtered_saliency = zip(
             *((masked_val, weight_val) for masked_val, weight_val in zip(mask, saliency) if masked_val == 1))
         th = np.percentile(np.array(filtered_saliency), percentage)
-        layer.set_mask(torch.ge(layer.get_saliency(), th).float())
+        layer.set_mask(torch.ge(layer.get_saliency(), th).float() * layer.get_mask())
 
 
 def find_network_threshold(network, percentage):
