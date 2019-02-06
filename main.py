@@ -16,7 +16,6 @@ from util.helper import transfer_old_model_to_new
 # constant variables
 hyper_params = {
     'num_retrain_epochs': 2,
-    'max_retrain_epochs': 10,
     'num_epochs': 200,
     'learning_rate': 0.01,
     'momentum': 0
@@ -41,9 +40,8 @@ def setup():
         logging.info('Created directory for results')
 
 
-def setup_training(model):
-    optimizer = torch.optim.SGD(model.parameters(), lr=hyper_params['learning_rate'],
-                                momentum=hyper_params['momentum'])
+def setup_training(model, lr=0.01, mom=0.0):
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=mom)
     return optimizer
 
 
@@ -120,7 +118,7 @@ def prune_network(prune_strategy, filename='model', runs=1, save=False):
     strategy = PruneNeuralNetStrategy(prune_strategy)
     if strategy.requires_loss():
         # if optimal brain damage is used get dataset with only one batch
-        if prune_strategy in [optimal_brain_damage]:
+        if prune_strategy == optimal_brain_damage:
             btx = None
         else:
             btx = 100
@@ -142,6 +140,8 @@ def prune_network(prune_strategy, filename='model', runs=1, save=False):
         for i in range(runs):
             # load model
             model = torch.load(model_folder + filename + '.pt')
+
+            # check original values from model
             original_acc = test(test_set, model)
             original_weight_count = get_network_weight_count(model)
 
@@ -150,6 +150,7 @@ def prune_network(prune_strategy, filename='model', runs=1, save=False):
 
             # prune as long as there are more than 500 elements in the network
             while get_network_weight_count(model).item() > 500:
+                # start pruning
                 start = time.time()
                 strategy.prune(model, rate)
 
@@ -168,7 +169,8 @@ def prune_network(prune_strategy, filename='model', runs=1, save=False):
 
                         # stop retraining if the test accuracy imporves only slightly or the maximum number of
                         # retrainnig epochs is reached
-                        if new_acc - prev_acc < 0.01 or retrain_epoch >= hyper_params['max_retrain_epochs']:
+                        if (variable_retraining and new_acc - prev_acc < 0.01) \
+                                or retrain_epoch >= hyper_params['num_retrain_epochs']:
                             retrain = False
                         else:
                             retrain_epoch += 1

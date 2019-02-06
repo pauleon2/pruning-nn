@@ -152,9 +152,12 @@ def optimal_brain_surgeon_layer_wise(self, network, percentage):
 
     # where to put the cached layer inputs
     layer_input_path = out_dir + '/layerinput/'
+    # where to save the hessian matricies
+    hessian_inverse_path = out_dir + '/inverse/'
 
     # generate the input in the layers and save it for every batch
     keep_input_layerwise(network)
+
     for i, (images, labels) in enumerate(self.valid_dataset):
         images = images.reshape(-1, 28 * 28)
         network(images)
@@ -166,16 +169,13 @@ def optimal_brain_surgeon_layer_wise(self, network, percentage):
 
             np.save(path + 'layerinput-' + str(i), layer_input)
 
-    # where to save the hessian matricies
-    hessian_inverse_path = out_dir + '/inverse/'
-
     # generate the hessian matrix for each layer
     for name, layer in get_single_pruning_layer_with_name(network):
         hessian_inverse_location = hessian_inverse_path + name
         generate_hessian_inverse_fc(layer, hessian_inverse_location, layer_input_path + name)
-
     # prune the elements from the matrix
     # todo: evaluate if this can be done in upper for-loop
+
     for name, layer in get_single_pruning_layer_with_name(network):
         edge_cut(layer, hessian_inverse_path + name + '.npy', percentage)
 
@@ -237,7 +237,7 @@ def magnitude_class_distributed(self, network, percentage):
         w = layer.get_weight().data
         st_v = 1 / w.std()
         # set the saliency in the layer = weight/st.deviation
-        layer.set_saliency(st_v * w)
+        layer.set_saliency(st_v * w.abs())
 
     # prune network
     prune_network_by_saliency(network, percentage)
