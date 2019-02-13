@@ -4,9 +4,12 @@ import time
 import torch
 import torch.nn as nn
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 from pruning_nn.network import NeuralNetwork, MultiLayerNeuralNetwork
-from pruning_nn.util import get_network_weight_count, reset_pruned_network, get_single_pruning_layer_with_name
+from pruning_nn.util import get_network_weight_count, reset_pruned_network, get_single_pruning_layer_with_name, \
+    get_weight_distribution
 from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_class_blinded, magnitude_class_uniform, \
     random_pruning, optimal_brain_damage, optimal_brain_surgeon_layer_wise, magnitude_class_distributed
 from util.learning import train, test, cross_validation_error
@@ -51,36 +54,32 @@ def train_network(filename='model', multi_layer=False):
     if multi_layer:
         model = MultiLayerNeuralNetwork(28 * 28, 30, 10)
 
-    # Criterion and optimizer
-    # might actually use MSE Error
-    optimizer = setup_training(model)
-
     # train and test the network
     t = True
     epoch = 0
     prev_acc = 0
+
+    lr = hyper_params['learning_rate']
+    optimizer = setup_training(model, lr=lr, mom=0.5)
 
     while t and epoch < hyper_params['num_epochs']:
         train(train_set, model, optimizer, loss_func)
         new_acc = test(valid_set, model)
 
         if new_acc - prev_acc < 0.001:
-            if hyper_params['learning_rate'] > 0.0001:
+            if lr > 0.0001:
                 # adjust learning rate
-                hyper_params['learning_rate'] = hyper_params['learning_rate'] * 0.1
-                print('Reach smaller learning rate ' + str(hyper_params['learning_rate']))
+                lr = lr * 0.1
+                optimizer = setup_training(model, lr=lr, mom=0.5)
             else:
                 # stop training
                 t = False
 
         epoch += 1
         prev_acc = new_acc
-        print(epoch, prev_acc)
 
     acc = test(test_set, model)
-    print('Needed ' + str(epoch) + ' epochs to train model to accuracy: ' + str(acc))
-    # reset the learning rate for further training later
-    hyper_params['learning_rate'] = 0.01
+    print('Needed ' + str(epoch) + ' epochs to train model to accuracy: ' + str(acc) + ' model: ' + filename)
 
     # save the current model
     torch.save(model, model_folder + filename + '.pt')
@@ -110,7 +109,7 @@ def train_sparse_model(filename='model', save=False):
         torch.save(model, result_folder + filename + '-scratch.pt')
 
 
-def prune_network(prune_strategy, filename='model', runs=1, save=False):
+def prune_network(prune_strategy, filename='model', runs=1, variable_retraining=False, save=False):
     # setup variables for pruning
     pruning_rates = [70, 60, 50, 40, 25]  # experiment for 10, 15 and 25 percent of the weights each step.
 
@@ -218,21 +217,47 @@ def prune_network(prune_strategy, filename='model', runs=1, save=False):
         s.to_pickle(out_name + '.pkl')
 
 
+def train_models(num=10):
+    for i in range(num):
+        train_network('model' + str(i))
+
+
+def experiment1():
+    # takes approx. 2 weeks
+    for j in range(4):
+        model = 'model' + str(j)
+        s_m = (j == 0)  # save models from the first model only which is the highest performing one...
+        variabe_retr = (j == 4)  # do variable retraining in the last run that will be evaluated in isolation
+
+        # setup the number of retraining epochs....
+        if variabe_retr:
+            hyper_params['num_retrain_epochs'] = 10
+        else:
+            hyper_params['num_retrain_epochs'] = 2
+
+        for strat in [random_pruning, magnitude_class_distributed, magnitude_class_uniform, magnitude_class_blinded]:
+            prune_network(prune_strategy=strat, filename=model, runs=20, save=s_m, variable_retraining=variabe_retr)
+
+
+def experiment2():
+    # takes approx. 1 week
+    for strat in [random_pruning, magnitude_class_distributed, magnitude_class_uniform, magnitude_class_blinded]:
+        prune_network(prune_strategy=strat, filename='model', runs=50, save=True)
+
+
+def experiment3():
+    # takes minimum 2 weeks...
+    prune_network(prune_strategy=optimal_brain_damage, filename='model', runs=5, save=True)
+    prune_network(prune_strategy=optimal_brain_surgeon_layer_wise, filename='model', runs=5, save=True)
+
+
 if __name__ == '__main__':
     # setup environment
     setup()
     logging.basicConfig(filename='out/myapp.log', level=logging.INFO, format='%(asctime)s %(message)s')
 
-    # train_network()
+    prune_network(optimal_brain_damage, filename='model0')
 
-    # train the model
-    for j in range(4):
-        name = 'model' + str(j)
-        save_models = j == 0
+    exit()
 
-        train_network(filename=name)
-
-        # prune with percentage p
-        for strat in [random_pruning, magnitude_class_blinded, magnitude_class_uniform]:
-            prune_network(prune_strategy=strat, filename=name, runs=25, save=save_models)
-
+    experiment1()
