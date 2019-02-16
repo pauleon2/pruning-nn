@@ -39,6 +39,20 @@ class MultiLayerNeuralNetwork(nn.Module):
         return self.fc4(out)
 
 
+class LeNet300_100(nn.Module):
+    def __init__(self, input_size, num_classes):
+        super(LeNet300_100, self).__init__()
+        self.fc1 = MaskedLinearLayer(input_size, 300)
+        self.fc2 = MaskedLinearLayer(300, 100)
+        self.fc3 = MaskedLinearLayer(100, num_classes)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        out = self.relu(self.fc1(x))
+        out = self.relu(self.fc2(out))
+        return self.fc3(out)
+
+
 class MaskedLinearLayer(nn.Linear):
     def __init__(self, in_feature, out_features, bias=True, keep_layer_input=False):
         """
