@@ -1,10 +1,12 @@
 import os
 import math
 import torch
+from torch.autograd import grad
 import numpy as np
 from datetime import datetime
 
 from pruning_nn.network import MaskedLinearLayer
+from util.learning import cross_validation_error
 
 """
 This file contains some utility functions to calculate hessian matrix and its inverse.
@@ -136,7 +138,7 @@ def edge_cut(layer, hessian_inverse_path, cut_ratio):
 #
 # My own utility methods start here
 #
-def prune_network_by_saliency(network, percentage):
+def prune_network_by_saliency(network, value, percentage=True):
     """
     Prune the number of percentage weights from the network. The elements are pruned according to the saliency that is
     set in the network. By default the saliency is the actual weight of the connections. The number of elements are
@@ -145,11 +147,11 @@ def prune_network_by_saliency(network, percentage):
     given percentage from each layer.
 
     :param network:     The layers of the network.
-    :param percentage:  The percentage of weights that should be pruned.
-    :return: The calculated threshold.
+    :param value:       The number/percentage of elements that should be pruned.
+    :param percentage:  If percentage pruning or number of elements pruning is used.
     """
     # calculate the network's threshold
-    th = find_network_threshold(network, percentage)
+    th = find_network_threshold(network, value, percentage=percentage)
 
     # set the mask
     for layer in get_single_pruning_layer(network):
@@ -158,17 +160,28 @@ def prune_network_by_saliency(network, percentage):
         layer.set_mask(torch.ge(layer.get_saliency(), th).float() * layer.get_mask())
 
 
-def prune_layer_by_saliency(network, percentage):
+def prune_layer_by_saliency(network, value, percentage=True):
     for layer in get_single_pruning_layer(network):
         mask = list(layer.get_mask().abs().numpy().flatten())
         saliency = list(layer.get_saliency().numpy().flatten())
-        mask, filtered_saliency = zip(
+        _, filtered_saliency = zip(
             *((masked_val, weight_val) for masked_val, weight_val in zip(mask, saliency) if masked_val == 1))
-        th = np.percentile(np.array(filtered_saliency), percentage)
+
+        # calculate threshold
+        if percentage:
+            th = np.percentile(np.array(filtered_saliency), value)
+        else:
+            # due to floating point operations this is not 100 percent exact a few more or less weights might get
+            # deleted
+            add_val = math.floor(layer.get_weight_count()/get_network_weight_count(network) * value)
+            index = np.argsort(np.array(filtered_saliency))[add_val]
+            th = float(np.array(filtered_saliency)[index])
+
+        # set mask
         layer.set_mask(torch.ge(layer.get_saliency(), th).float() * layer.get_mask())
 
 
-def find_network_threshold(network, percentage):
+def find_network_threshold(network, value, percentage=True):
     all_sal = []
     for layer in get_single_pruning_layer(network):
         # flatten both weights and mask
@@ -176,13 +189,68 @@ def find_network_threshold(network, percentage):
         saliency = list(layer.get_saliency().numpy().flatten())
 
         # zip, filter, unzip the two lists
-        mask, filtered_saliency = zip(
+        _, filtered_saliency = zip(
             *((masked_val, weight_val) for masked_val, weight_val in zip(mask, saliency) if masked_val == 1))
         # add all saliencies to list
         all_sal += filtered_saliency
 
     # calculate percentile
-    return np.percentile(np.array(all_sal), percentage)
+    if percentage:
+        return np.percentile(np.array(all_sal), value)
+    else:
+        index = np.argsort(np.array(all_sal))[value]
+        return float(np.array(all_sal)[index])
+
+
+def calculate_obd_saliency(self, network):
+    # the loss of the network on the cross validation set
+    loss = cross_validation_error(self.valid_dataset, network, self.criterion)
+
+    # Use GPU optimization if available
+    if torch.cuda.is_available():
+        network.cuda()
+        loss.cuda()
+
+    # calculate the first order gradients for all weights from the pruning layers.
+    weight_params = map(lambda x: x.get_weight(), get_single_pruning_layer(network))
+    loss_grads = grad(loss, weight_params, create_graph=True)
+
+    # iterate over all layers and zip them with their corrosponding first gradient
+    for grd, layer in zip(loss_grads, get_single_pruning_layer(network)):
+        all_grads = []
+        mask = layer.get_mask().view(-1)
+        weight = layer.get_weight()
+
+        # zip gradient and mask of the network in a lineared fashion
+        for num, (g, m) in enumerate(zip(grd.view(-1), mask)):
+            if m.item() == 0:
+                # if the element is pruned i.e. if mask == 0 then the second order derivative should e zero as well
+                # so no computations are needed
+                all_grads += [0]
+            else:
+                # create the second order derivative and add it to the list which contains all gradients
+                drv = grad(g, weight, retain_graph=True)
+                all_grads += [drv[0].view(-1)[num].item()]
+
+        # rearrange calculated value to their normal form and set saliency
+        layer.set_saliency(
+            torch.tensor(all_grads).view(weight.size()) * layer.get_weight().data.pow(2) * 0.5)
+
+
+def set_random_saliency(network):
+    # set saliency to random values
+    for layer in get_single_pruning_layer(network):
+        layer.set_saliency(torch.rand_like(layer.get_weight()) * layer.get_mask())
+
+
+def set_distributed_saliency(network):
+    # prune from each layer the according number of elements
+    for layer in get_single_pruning_layer(network):
+        # calculate standard deviation for the layer
+        w = layer.get_weight().data
+        st_v = 1 / w.std()
+        # set the saliency in the layer = weight/st.deviation
+        layer.set_saliency(st_v * w.abs())
 
 
 def get_filtered_saliency(saliency, mask):

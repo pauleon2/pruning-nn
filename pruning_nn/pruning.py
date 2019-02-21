@@ -1,12 +1,10 @@
 import torch
 import os
 import numpy as np
-from torch.autograd import grad
 from pruning_nn.util import get_single_pruning_layer, get_network_weight_count, prune_layer_by_saliency, \
     prune_network_by_saliency, generate_hessian_inverse_fc, edge_cut, keep_input_layerwise, \
     get_single_pruning_layer_with_name, get_layer_count, get_weight_distribution, \
-    find_network_threshold, get_filtered_saliency
-from util.learning import cross_validation_error
+    find_network_threshold, get_filtered_saliency, calculate_obd_saliency, set_random_saliency, set_distributed_saliency
 
 
 class PruneNeuralNetStrategy:
@@ -24,19 +22,13 @@ class PruneNeuralNetStrategy:
 
     The following algorithms are currently under construction:
     <ul>
-        <li>Magnitude Pruning Distribution</li>
         <li>Layer-wise Optimal Brain Surgeon</li>
-        <li>Net Trim</li>
-    </ul>
-
-    Optionally the following will be implemented:
-    <ul>
-        <li>Improved OBS</li>
     </ul>
 
     Method that were considered but due to inefficiency not implemented:
     <ul>
         <li>Optimal Brain Surgeon</li>
+        <li>Net-Trim</li>
     </ul>
 
     All methods except of the random pruning and magnitude based pruning require the loss argument. In order to
@@ -95,41 +87,15 @@ def optimal_brain_damage(self, network, percentage):
     :param network:     The network where the calculations should be done.
     :param percentage:  The percentage of weights that should be pruned.
     """
-    # the loss of the network on the cross validation set
-    loss = cross_validation_error(self.valid_dataset, network, self.criterion)
-
-    # Use GPU optimization if available
-    if torch.cuda.is_available():
-        network.cuda()
-        loss.cuda()
-
-    # calculate the first order gradients for all weights from the pruning layers.
-    weight_params = map(lambda x: x.get_weight(), get_single_pruning_layer(network))
-    loss_grads = grad(loss, weight_params, create_graph=True)
-
-    # iterate over all layers and zip them with their corrosponding first gradient
-    for grd, layer in zip(loss_grads, get_single_pruning_layer(network)):
-        all_grads = []
-        mask = layer.get_mask().view(-1)
-        weight = layer.get_weight()
-
-        # zip gradient and mask of the network in a lineared fashion
-        for num, (g, m) in enumerate(zip(grd.view(-1), mask)):
-            if m.item() == 0:
-                # if the element is pruned i.e. if mask == 0 then the second order derivative should e zero as well
-                # so no computations are needed
-                all_grads += [0]
-            else:
-                # create the second order derivative and add it to the list which contains all gradients
-                drv = grad(g, weight, retain_graph=True)
-                all_grads += [drv[0].view(-1)[num].item()]
-
-        # rearrange calculated value to their normal form and set saliency
-        layer.set_saliency(
-            torch.tensor(all_grads).view(weight.size()) * layer.get_weight().data.pow(2) * 0.5)
-
+    # calculate the saliencies for the weights
+    calculate_obd_saliency(self, network)
     # prune the elements with the lowest saliency in the network
     prune_network_by_saliency(network, percentage)
+
+
+def optimal_brain_damage_absolute(self, network, number):
+    calculate_obd_saliency(self, network)
+    prune_network_by_saliency(network, number, percentage=False)
 
 
 #
@@ -184,12 +150,14 @@ def optimal_brain_surgeon_layer_wise(self, network, percentage):
 # Random pruning
 #
 def random_pruning(self, network, percentage):
-    # set saliency to random values
-    for layer in get_single_pruning_layer(network):
-        layer.set_saliency(torch.rand_like(layer.get_weight()) * layer.get_mask())
-
+    set_random_saliency(network)
     # prune the percentage% weights with the smallest random saliency
     prune_network_by_saliency(network, percentage)
+
+
+def random_pruning_absolute(self, network, number):
+    set_random_saliency(network)
+    prune_network_by_saliency(network, number, percentage=False)
 
 
 #
@@ -210,8 +178,16 @@ def magnitude_class_blinded(self, network, percentage):
     prune_network_by_saliency(network, percentage)
 
 
+def magnitude_class_blinded_absolute(self, network, number):
+    prune_network_by_saliency(network, number, percentage=False)
+
+
 def magnitude_class_uniform(self, network, percentage):
     prune_layer_by_saliency(network, percentage)
+
+
+def magnitude_class_uniform_absolute(self, network, number):
+    prune_layer_by_saliency(network, number, percentage=False)
 
 
 def magnitude_class_distributed(self, network, percentage):
@@ -230,14 +206,12 @@ def magnitude_class_distributed(self, network, percentage):
     :param percentage:  The number of elements that should be pruned.
     :return:
     """
-
-    # prune from each layer the according number of elements
-    for layer in get_single_pruning_layer(network):
-        # calculate standard deviation for the layer
-        w = layer.get_weight().data
-        st_v = 1 / w.std()
-        # set the saliency in the layer = weight/st.deviation
-        layer.set_saliency(st_v * w.abs())
-
+    # set saliency
+    set_distributed_saliency(network)
     # prune network
     prune_network_by_saliency(network, percentage)
+
+
+def magnitude_class_distributed_absolute(self, network, number):
+    set_distributed_saliency(network)
+    prune_network_by_saliency(network, number, percentage=False)
