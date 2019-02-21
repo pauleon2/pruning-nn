@@ -6,14 +6,8 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-from pruning_nn.network import NeuralNetwork, MultiLayerNeuralNetwork, LeNet300_100
-from pruning_nn.util import get_network_weight_count, reset_pruned_network, get_single_pruning_layer_with_name, \
-    get_weight_distribution
-from pruning_nn.pruning import PruneNeuralNetStrategy, magnitude_class_blinded, magnitude_class_uniform, \
-    random_pruning, optimal_brain_damage, optimal_brain_surgeon_layer_wise, magnitude_class_distributed
-from util.learning import train, test, cross_validation_error
-from util.dataloader import get_train_valid_dataset, get_test_dataset
-from util.helper import transfer_old_model_to_new
+from pruning_nn import *
+from util import *
 
 # constant variables
 hyper_params = {
@@ -28,8 +22,8 @@ hyper_params = {
 result_folder = './out/result/'
 model_folder = './out/model/'
 
-test_set = get_test_dataset()
-train_set, valid_set = get_train_valid_dataset(valid_batch=100)
+test_set = dataloader.get_test_dataset()
+train_set, valid_set = dataloader.get_train_valid_dataset(valid_batch=100)
 loss_func = nn.CrossEntropyLoss()
 
 
@@ -49,7 +43,7 @@ def setup_training(model, lr=0.01, mom=0.0):
 
 def train_network(filename='model'):
     # create neural net and train (input is image, output is number between 0 and 9.
-    model = NeuralNetwork(28 * 28, 100, 10)
+    model = network.NeuralNetwork(28 * 28, 100, 10)
     # if multi_layer:
     #    model = MultiLayerNeuralNetwork(28 * 28, 30, 10)
     # model = LeNet300_100(28 * 28, 10)
@@ -64,8 +58,8 @@ def train_network(filename='model'):
     optimizer = setup_training(model, lr=lr, mom=0.5)
 
     while t and epoch < hyper_params['num_epochs']:
-        train(train_set, model, optimizer, loss_func)
-        new_acc = test(valid_set, model)
+        learning.train(train_set, model, optimizer, loss_func)
+        new_acc = learning.test(valid_set, model)
 
         if new_acc - prev_acc < 0.001:
             if lr > 0.0001:
@@ -79,7 +73,7 @@ def train_network(filename='model'):
         epoch += 1
         prev_acc = new_acc
 
-    acc = test(test_set, model)
+    acc = learning.test(test_set, model)
     print('Needed ' + str(epoch) + ' epochs to train model to accuracy: ' + str(acc) + ' model: ' + filename)
 
     # save the current model
@@ -88,7 +82,7 @@ def train_network(filename='model'):
 
 def train_sparse_model(filename='model', save=False):
     model = torch.load(result_folder + filename + '.pt')
-    pruned_acc = test(test_set, model)
+    pruned_acc = learning.test(test_set, model)
     optimizer = setup_training(model)
 
     s = pd.DataFrame(columns=['epoch', 'test_acc'])
@@ -96,12 +90,12 @@ def train_sparse_model(filename='model', save=False):
 
     # todo: use early stopping or something else to stop training for this particular model
     for epoch in range(hyper_params['num_epochs']):
-        train(train_set, model, optimizer, loss_func)
-        tr = test(test_set, model)
+        learning.train(train_set, model, optimizer, loss_func)
+        tr = learning.test(test_set, model)
         s = s.append({'epoch': epoch, 'test_acc': tr}, ignore_index=True)
         print(epoch, tr)
 
-    final_acc = test(test_set, model)
+    final_acc = learning.test(test_set, model)
     print(pruned_acc, final_acc)
 
     s.to_pickle(result_folder + filename + '-scatch.pkl')
@@ -110,21 +104,20 @@ def train_sparse_model(filename='model', save=False):
 
 
 def prune_network(prune_strategy, pruning_rates=None, filename='model', runs=1, variable_retraining=False, save=False):
-
     if pruning_rates is None:
         pruning_rates = [70, 60, 50, 40, 25]
 
     # prune using strategy
-    strategy = PruneNeuralNetStrategy(prune_strategy)
+    strategy = pruning.PruneNeuralNetStrategy(prune_strategy)
 
     # calculate the loss of the network if it is needed by the pruning method for the saliency calculation
     if strategy.requires_loss():
         # if optimal brain damage is used get dataset with only one batch
-        if prune_strategy == optimal_brain_damage:
+        if prune_strategy == pruning.optimal_brain_damage:
             btx = None
         else:
             btx = 100
-        _, strategy.valid_dataset = get_train_valid_dataset(valid_batch=btx)
+        _, strategy.valid_dataset = learning.get_train_valid_dataset(valid_batch=btx)
         strategy.criterion = loss_func
 
     # output variables
@@ -144,14 +137,14 @@ def prune_network(prune_strategy, pruning_rates=None, filename='model', runs=1, 
             model = torch.load(model_folder + filename + '.pt')
 
             # check original values from model
-            original_acc = test(test_set, model)
-            original_weight_count = get_network_weight_count(model)
+            original_acc = learning.test(test_set, model)
+            original_weight_count = util.get_network_weight_count(model)
 
             # loss and optimizer for the loaded model
             optimizer = setup_training(model)
 
             # prune as long as there are more than 500 elements in the network
-            while get_network_weight_count(model).item() > 500:
+            while util.get_network_weight_count(model).item() > 500:
                 # start pruning
                 start = time.time()
                 strategy.prune(model, rate)
@@ -159,8 +152,8 @@ def prune_network(prune_strategy, pruning_rates=None, filename='model', runs=1, 
                 # Retrain and reevaluate the process
                 if strategy.require_retraining():
                     # test the untrained performance
-                    untrained_test_acc = test(test_set, model)
-                    untrained_acc = test(valid_set, model)
+                    untrained_test_acc = learning.test(test_set, model)
+                    untrained_acc = learning.test(valid_set, model)
 
                     # setup variables for loop retraining
                     prev_acc = untrained_acc
@@ -169,8 +162,8 @@ def prune_network(prune_strategy, pruning_rates=None, filename='model', runs=1, 
 
                     # continue retraining for variable time
                     while retrain:
-                        train(train_set, model, optimizer, loss_func)
-                        new_acc = test(valid_set, model)
+                        learning.train(train_set, model, optimizer, loss_func)
+                        new_acc = learning.test(valid_set, model)
 
                         # stop retraining if the test accuracy imporves only slightly or the maximum number of
                         # retrainnig epochs is reached
@@ -181,22 +174,22 @@ def prune_network(prune_strategy, pruning_rates=None, filename='model', runs=1, 
                             retrain_epoch += 1
                             prev_acc = new_acc
 
-                    final_acc = test(test_set, model)
+                    final_acc = learning.test(test_set, model)
                     retrain_change = final_acc - untrained_test_acc
                 else:
                     retrain_epoch = 0
-                    final_acc = test(test_set, model)
+                    final_acc = learning.test(test_set, model)
                     retrain_change = 0
 
                 # Save the best models with the following criterion
                 # 1. smallest weight count with max 1% accuracy drop from the original model.
                 # 2. best performing model overall with at least a compression rate of 50%.
                 if save and (
-                        (original_acc - final_acc < 1 and get_network_weight_count(model) < smallest_model) or (
-                        get_network_weight_count(model) <= original_weight_count / 2 and final_acc > best_acc)):
+                        (original_acc - final_acc < 1 and util.get_network_weight_count(model) < smallest_model) or (
+                        util.get_network_weight_count(model) <= original_weight_count / 2 and final_acc > best_acc)):
                     # set the values to the new ones
                     best_acc = final_acc if final_acc > best_acc else best_acc
-                    model_size = int(get_network_weight_count(model))
+                    model_size = int(util.get_network_weight_count(model))
                     smallest_model = model_size if model_size < smallest_model else smallest_model
 
                     # save the model
@@ -210,7 +203,7 @@ def prune_network(prune_strategy, pruning_rates=None, filename='model', runs=1, 
                 tmp = pd.DataFrame({'run': [i],
                                     'accuracy': [final_acc],
                                     'pruning_perc': [rate],
-                                    'number_of_weights': [get_network_weight_count(model).item()],
+                                    'number_of_weights': [util.get_network_weight_count(model).item()],
                                     'pruning_method': [str(prune_strategy.__name__)],
                                     'time': [time_needed],
                                     'retrain_change': [retrain_change],
@@ -232,15 +225,16 @@ def experiment1():
         model = 'model' + str(j)
         s_m = (j == 0)  # save models from the first model only which is the highest performing one...
 
-        for strat in [random_pruning, magnitude_class_distributed, magnitude_class_uniform, magnitude_class_blinded]:
+        for strat in [pruning.random_pruning, pruning.magnitude_class_distributed, pruning.magnitude_class_uniform,
+                      pruning.magnitude_class_blinded]:
             prune_network(prune_strategy=strat, filename=model, runs=25, save=s_m)
 
-    prune_network(prune_strategy=optimal_brain_damage, filename='model0', runs=25, save=True)
+    prune_network(prune_strategy=pruning.optimal_brain_damage, filename='model0', runs=25, save=True)
 
 
 def experiment2():
-    for strat in [random_pruning, magnitude_class_distributed, magnitude_class_uniform, magnitude_class_blinded,
-                  optimal_brain_damage]:
+    for strat in [pruning.random_pruning, pruning.magnitude_class_distributed, pruning.magnitude_class_uniform,
+                  pruning.magnitude_class_blinded, pruning.optimal_brain_damage]:
         # variable retraining
         hyper_params['num_retrain_epochs'] = 10
         prune_network(prune_strategy=strat, pruning_rates=[50], filename='model', runs=25, variable_retraining=True,

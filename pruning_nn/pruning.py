@@ -1,10 +1,6 @@
-import torch
 import os
 import numpy as np
-from pruning_nn.util import get_single_pruning_layer, get_network_weight_count, prune_layer_by_saliency, \
-    prune_network_by_saliency, generate_hessian_inverse_fc, edge_cut, keep_input_layerwise, \
-    get_single_pruning_layer_with_name, get_layer_count, get_weight_distribution, \
-    find_network_threshold, get_filtered_saliency, calculate_obd_saliency, set_random_saliency, set_distributed_saliency
+from pruning_nn.util import *
 
 
 class PruneNeuralNetStrategy:

@@ -8,6 +8,11 @@ from datetime import datetime
 from pruning_nn.network import MaskedLinearLayer
 from util.learning import cross_validation_error
 
+__all__ = ["generate_hessian_inverse_fc", "edge_cut", "prune_network_by_saliency", "prune_layer_by_saliency",
+           "calculate_obd_saliency", "keep_input_layerwise", "get_network_weight_count", "get_filtered_saliency",
+           "get_layer_count", "get_single_pruning_layer", "get_single_pruning_layer_with_name",
+           "get_weight_distribution", "set_distributed_saliency", "set_random_saliency", "reset_pruned_network"]
+
 """
 This file contains some utility functions to calculate hessian matrix and its inverse.
 
@@ -62,7 +67,7 @@ def edge_cut(layer, hessian_inverse_path, cut_ratio):
     :param cut_ratio: The zeros percentage of weights and biases, or, 1 - compression ratio
     :return:
     """
-    cut_ratio = cut_ratio/100  # transfer percentage from full value to floating point
+    cut_ratio = cut_ratio / 100  # transfer percentage from full value to floating point
 
     # dataset_size = layer2_input_train.shape[0]
     w_layer = layer.get_weight().data.numpy().T
@@ -173,7 +178,7 @@ def prune_layer_by_saliency(network, value, percentage=True):
         else:
             # due to floating point operations this is not 100 percent exact a few more or less weights might get
             # deleted
-            add_val = math.floor(layer.get_weight_count()/get_network_weight_count(network) * value)
+            add_val = math.floor(layer.get_weight_count() / get_network_weight_count(network) * value)
             index = np.argsort(np.array(filtered_saliency))[add_val]
             th = float(np.array(filtered_saliency)[index])
 
@@ -258,7 +263,7 @@ def get_filtered_saliency(saliency, mask):
     m = list(mask)
 
     _, filtered_w = zip(
-            *((masked_val, weight_val) for masked_val, weight_val in zip(m, s) if masked_val == 1))
+        *((masked_val, weight_val) for masked_val, weight_val in zip(m, s) if masked_val == 1))
     return filtered_w
 
 
