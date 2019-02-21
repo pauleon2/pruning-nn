@@ -3,8 +3,6 @@ import time
 import torch
 import torch.nn as nn
 import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 from pruning_nn import *
 from util import *
@@ -47,7 +45,6 @@ def train_network(filename='model'):
     # if multi_layer:
     #    model = MultiLayerNeuralNetwork(28 * 28, 30, 10)
     # model = LeNet300_100(28 * 28, 10)
-    # print(get_network_weight_count(model))
 
     # train and test the network
     t = True
@@ -73,9 +70,6 @@ def train_network(filename='model'):
         epoch += 1
         prev_acc = new_acc
 
-    acc = learning.test(test_set, model)
-    print('Needed ' + str(epoch) + ' epochs to train model to accuracy: ' + str(acc) + ' model: ' + filename)
-
     # save the current model
     torch.save(model, model_folder + filename + '.pt')
 
@@ -93,10 +87,6 @@ def train_sparse_model(filename='model', save=False):
         learning.train(train_set, model, optimizer, loss_func)
         tr = learning.test(test_set, model)
         s = s.append({'epoch': epoch, 'test_acc': tr}, ignore_index=True)
-        print(epoch, tr)
-
-    final_acc = learning.test(test_set, model)
-    print(pruned_acc, final_acc)
 
     s.to_pickle(result_folder + filename + '-scatch.pkl')
     if save:
@@ -247,14 +237,14 @@ def experiment2():
 
 
 def experiment3():
-    # todo: implement experiment 3 with fixed value pruning either as funciton in main or as single pruning strategies
+    # todo: call correct methods has to be defined implementation done
     # will use either fixed or variable retraining depending on the results from experiment one and two
     # 25 runs, 1 model
     pass
 
 
 def experiment4():
-    # todo: implement single big bang pruning. This will include L-OBS as a pruning technique. Uses variable retraining
+    # todo: call correct methods. This will include L-OBS as a pruning technique. Uses variable retraining
     # wit a maximum of 20 retraining epochs and uses 25 runs, 1 model
     pass
 

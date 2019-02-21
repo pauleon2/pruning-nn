@@ -3,7 +3,6 @@ import math
 import torch
 from torch.autograd import grad
 import numpy as np
-from datetime import datetime
 
 from pruning_nn.network import MaskedLinearLayer
 from util.learning import cross_validation_error
@@ -50,13 +49,7 @@ def generate_hessian_inverse_fc(layer, hessian_inverse_path, layer_input_train_d
             numerator = np.dot(np.dot(hessian_inverse, vect_w), np.dot(vect_w.T, hessian_inverse))
             hessian_inverse = hessian_inverse - numerator * (1.00 / denominator)
 
-        if input_index % 100 == 0:
-            # todo: remove
-            print('[%s] Finish processing batch %s' % (datetime.now(), input_index))
-
     np.save(hessian_inverse_path, hessian_inverse)
-    # todo: remove
-    print('[%s]Hessian Inverse Done!' % (datetime.now()))
 
 
 def edge_cut(layer, hessian_inverse_path, cut_ratio):
@@ -79,26 +72,18 @@ def edge_cut(layer, hessian_inverse_path, cut_ratio):
     sensitivity = np.array([])
 
     hessian_inverse = np.load(hessian_inverse_path)
-    # todo: remove
-    print('[%s] Hessian Inverse Done!' % datetime.now())
 
     gate_w = layer.get_mask().data.numpy().T
     # gate_b = np.ones([n_hidden_2])
 
     # calculate number of pruneable elements
-    max_pruned_num = int(layer.get_weight_count() * cut_ratio)  # todo: make sure this is exactly the same as percentage
-    # todo: remove
-    print('[%s] Max prune number : %d' % (datetime.now(), max_pruned_num))
+    max_pruned_num = math.floor(layer.get_weight_count() * cut_ratio)
 
     # Calcuate sensitivity score. Refer to Eq.5.
     for i in range(n_hidden_2):
         sensitivity = np.hstack(
             (sensitivity, 0.5 * ((w_layer.T[i] ** 2) / np.diag(hessian_inverse))))
     sorted_index = np.argsort(sensitivity)
-
-    # todo: remove x2
-    print('[%s] Sorted index generate completed.' % datetime.now())
-    print('[%s] Starting Pruning!' % datetime.now())
     hessian_inverseT = hessian_inverse.T
 
     prune_count = 0
@@ -119,15 +104,7 @@ def edge_cut(layer, hessian_inverse_path, cut_ratio):
         # b_layer = b_layer * gate_b
 
         if prune_count == max_pruned_num:
-            # todo: remove
-            print('[%s] Have prune required weights' % datetime.now())
             break
-
-    # print 'Non-zeros: %d' %np.count_nonzero(w_layer)
-    # print 'weights number: %d' %w_layer.size
-    # todo: remove
-    print('[%s] Prune Finish. compression ratio: %.3f' % (
-        datetime.now(), 1 - (float(np.count_nonzero(w_layer)) / w_layer.size)))
 
     # set created mask to network again and update the weights
     layer.set_mask(torch.from_numpy(gate_w.T))
