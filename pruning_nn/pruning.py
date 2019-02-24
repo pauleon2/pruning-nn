@@ -136,8 +136,6 @@ def optimal_brain_surgeon_layer_wise(self, network, percentage):
         hessian_inverse_location = hessian_inverse_path + name
         generate_hessian_inverse_fc(layer, hessian_inverse_location, layer_input_path + name)
     # prune the elements from the matrix
-    # todo: evaluate if this can be done in upper for-loop
-
     for name, layer in get_single_pruning_layer_with_name(network):
         edge_cut(layer, hessian_inverse_path + name + '.npy', percentage)
 

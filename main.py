@@ -94,6 +94,16 @@ def train_sparse_model(filename='model', save=False):
 
 
 def prune_network(prune_strategy, pruning_rates=None, filename='model', runs=1, variable_retraining=False, save=False):
+    """
+
+    :param prune_strategy:  The strategy that is used for pruning.
+    :param pruning_rates:   The rates that are pruned is an array that contains a number of either full value
+                            percentages or the total number of elements that should be removed.
+    :param filename:        The filename of the model that should be pruned
+    :param runs:            How many times this should be redone
+    :param variable_retraining: If variable retraining or fixed retraining is used
+    :param save:            If the final models should be saved
+    """
     if pruning_rates is None:
         pruning_rates = [70, 60, 50, 40, 25]
 
