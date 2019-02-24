@@ -143,6 +143,8 @@ def prune_network_by_saliency(network, value, percentage=True):
 
 
 def prune_layer_by_saliency(network, value, percentage=True):
+    pre_pruned_weight_count = get_network_weight_count(network).item()
+
     for layer in get_single_pruning_layer(network):
         mask = list(layer.get_mask().abs().numpy().flatten())
         saliency = list(layer.get_saliency().numpy().flatten())
@@ -155,14 +157,14 @@ def prune_layer_by_saliency(network, value, percentage=True):
         else:
             # due to floating point operations this is not 100 percent exact a few more or less weights might get
             # deleted
-            add_val = math.floor(layer.get_weight_count() / get_network_weight_count(network) * value)
-            # check if there are enough elements to prune
+            # todo: check if this can be improved to lead to more accurate results
+            add_val = math.floor(layer.get_weight_count() / pre_pruned_weight_count * value)
+            # check if there are enough elements to prune select the highest element and add some penalty to it so the
             if add_val > layer.get_weight_count():
-                add_val = layer.get_weight_count() - 1
-            # determine threshold
-            index = np.argsort(np.array(filtered_saliency))[add_val]
-            return np.array(filtered_saliency)[index].item()
-
+                th = np.argmax(filtered_saliency).item() + 1
+            else:
+                index = np.argsort(np.array(filtered_saliency))[add_val]
+                th = np.array(filtered_saliency)[index].item()
         # set mask
         layer.set_mask(torch.ge(layer.get_saliency(), th).float() * layer.get_mask())
 
@@ -186,11 +188,11 @@ def find_network_threshold(network, value, percentage=True):
     else:
         # check if there are enough elements to prune
         if value > len(all_sal):
-            value = len(all_sal) - 1
-
-        # determine threshold
-        index = np.argsort(np.array(all_sal))[value]
-        return np.array(all_sal)[index].item()
+            return np.argmax(np.array(all_sal)).item() + 1
+        else:
+            # determine threshold
+            index = np.argsort(np.array(all_sal))[value]
+            return np.array(all_sal)[index].item()
 
 
 def calculate_obd_saliency(self, network):
