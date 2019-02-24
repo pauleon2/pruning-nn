@@ -156,8 +156,12 @@ def prune_layer_by_saliency(network, value, percentage=True):
             # due to floating point operations this is not 100 percent exact a few more or less weights might get
             # deleted
             add_val = math.floor(layer.get_weight_count() / get_network_weight_count(network) * value)
+            # check if there are enough elements to prune
+            if add_val > layer.get_weight_count():
+                add_val = layer.get_weight_count() - 1
+            # determine threshold
             index = np.argsort(np.array(filtered_saliency))[add_val]
-            th = float(np.array(filtered_saliency)[index])
+            return np.array(filtered_saliency)[index].item()
 
         # set mask
         layer.set_mask(torch.ge(layer.get_saliency(), th).float() * layer.get_mask())
@@ -180,8 +184,13 @@ def find_network_threshold(network, value, percentage=True):
     if percentage:
         return np.percentile(np.array(all_sal), value)
     else:
+        # check if there are enough elements to prune
+        if value > len(all_sal):
+            value = len(all_sal) - 1
+
+        # determine threshold
         index = np.argsort(np.array(all_sal))[value]
-        return float(np.array(all_sal)[index])
+        return np.array(all_sal)[index].item()
 
 
 def calculate_obd_saliency(self, network):
