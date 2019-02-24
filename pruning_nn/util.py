@@ -157,8 +157,8 @@ def prune_layer_by_saliency(network, value, percentage=True):
         else:
             # due to floating point operations this is not 100 percent exact a few more or less weights might get
             # deleted
-            # todo: check if this can be improved to lead to more accurate results
-            add_val = math.floor(layer.get_weight_count() / pre_pruned_weight_count * value)
+            add_val = round((layer.get_weight_count() / pre_pruned_weight_count * value).item())
+
             # check if there are enough elements to prune select the highest element and add some penalty to it so the
             if add_val > layer.get_weight_count():
                 th = np.argmax(filtered_saliency).item() + 1

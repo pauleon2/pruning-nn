@@ -93,16 +93,17 @@ def train_sparse_model(filename='model', save=False):
         torch.save(model, result_folder + filename + '-scratch.pt')
 
 
-def prune_network(prune_strategy, pruning_rates=None, filename='model', runs=1, variable_retraining=False, save=False):
+def prune_network(prune_strategy, pruning_rates=None, filename='model', runs=1, variable_retraining=False, save=False,
+                  minimal_size=500):
     """
-
     :param prune_strategy:  The strategy that is used for pruning.
     :param pruning_rates:   The rates that are pruned is an array that contains a number of either full value
                             percentages or the total number of elements that should be removed.
-    :param filename:        The filename of the model that should be pruned
-    :param runs:            How many times this should be redone
-    :param variable_retraining: If variable retraining or fixed retraining is used
-    :param save:            If the final models should be saved
+    :param filename:        The filename of the model that should be pruned.
+    :param runs:            How many times this should be redone.
+    :param variable_retraining: If variable retraining or fixed retraining is used.
+    :param save:            If the final models should be saved.
+    :param minimal_size:    The minimal size that is allowed to prune the model. Iff -1 then prune exactly once.
     """
     if pruning_rates is None:
         pruning_rates = [70, 60, 50, 40, 25]
@@ -136,6 +137,10 @@ def prune_network(prune_strategy, pruning_rates=None, filename='model', runs=1, 
             # load model
             model = torch.load(model_folder + filename + '.pt')
 
+            # if the minimal size is negative, allow exactly one pruning step
+            if minimal_size < 0:
+                minimal_size = util.get_network_weight_count(model) - 1
+
             # check original values from model
             original_acc = learning.test(test_set, model)
             original_weight_count = util.get_network_weight_count(model)
@@ -144,7 +149,7 @@ def prune_network(prune_strategy, pruning_rates=None, filename='model', runs=1, 
             optimizer = setup_training(model)
 
             # prune as long as there are more than 500 elements in the network
-            while util.get_network_weight_count(model).item() > 500:
+            while util.get_network_weight_count(model).item() > minimal_size:
                 # start pruning
                 start = time.time()
                 strategy.prune(model, rate)
