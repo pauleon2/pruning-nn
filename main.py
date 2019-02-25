@@ -118,7 +118,7 @@ def prune_network(prune_strategy, pruning_rates=None, filename='model', runs=1, 
             btx = None
         else:
             btx = 100
-        _, strategy.valid_dataset = learning.get_train_valid_dataset(valid_batch=btx)
+        _, strategy.valid_dataset = dataloader.get_train_valid_dataset(valid_batch=btx)
         strategy.criterion = loss_func
 
     # output variables
