@@ -262,7 +262,7 @@ def experiment3():
 
 def experiment4():
     # wit a maximum of 20 retraining epochs and uses 25 runs, 1 model
-    hyper_params['num_retrain_epochs'] = 20
+    hyper_params['num_retrain_epochs'] = 25
 
     for meth in [pruning.random_pruning, pruning.magnitude_class_uniform, pruning.magnitude_class_distributed,
                  pruning.magnitude_class_blinded, pruning.optimal_brain_damage,
