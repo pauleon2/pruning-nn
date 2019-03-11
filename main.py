@@ -113,7 +113,7 @@ def prune_network(pruning_method, pruning_rates=None, filename='model', runs=1, 
     # calculate the loss of the network if it is needed by the pruning method for the saliency calculation
     if method.requires_loss():
         # if optimal brain damage is used get dataset with only one batch
-        if pruning_method == pruning.optimal_brain_damage:
+        if pruning_method == pruning.optimal_brain_damage or pruning_method == pruning.optimal_brain_damage_absolute:
             btx = None
         else:
             btx = 100

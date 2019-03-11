@@ -61,7 +61,8 @@ class PruneNeuralNetStrategy:
         Check if the current pruning method needs the network's loss as an argument.
         :return: True iff a gradient of the network is required.
         """
-        return self.prune_strategy in [optimal_brain_damage, optimal_brain_surgeon_layer_wise]
+        return self.prune_method in [optimal_brain_damage, optimal_brain_damage_absolute,
+                                     optimal_brain_surgeon_layer_wise]
 
     def require_retraining(self):
         """
