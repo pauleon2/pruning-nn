@@ -3,14 +3,28 @@ import math
 import torch
 from torch.autograd import grad
 import numpy as np
+from enum import Enum
 
 from pruning_nn.network import MaskedLinearLayer
 from util.learning import cross_validation_error
 
+
 __all__ = ["generate_hessian_inverse_fc", "edge_cut", "prune_network_by_saliency", "prune_layer_by_saliency",
            "calculate_obd_saliency", "keep_input_layerwise", "get_network_weight_count", "get_filtered_saliency",
            "get_layer_count", "get_single_pruning_layer", "get_single_pruning_layer_with_name",
-           "get_weight_distribution", "set_distributed_saliency", "set_random_saliency", "reset_pruned_network"]
+           "get_weight_distribution", "set_distributed_saliency", "set_random_saliency", "reset_pruned_network",
+           "calculate_obsl_saliency", "PruningStrategy"]
+
+
+class PruningStrategy(Enum):
+    """
+    Enum to represent the different prunuing strategies that can be used.
+    Note: not every pruning strategy can be used with every pruning method.
+    """
+    PERCENTAGE = 0
+    ABSOLUTE = 1
+    BUCKET = 2
+
 
 """
 This file contains some utility functions to calculate hessian matrix and its inverse.
@@ -52,16 +66,15 @@ def generate_hessian_inverse_fc(layer, hessian_inverse_path, layer_input_train_d
     np.save(hessian_inverse_path, hessian_inverse)
 
 
-def edge_cut(layer, hessian_inverse_path, cut_ratio):
+def edge_cut(layer, hessian_inverse_path, value, strategy=PruningStrategy.PERCENTAGE):
     """
     This function prune weights of biases based on given hessian inverse and cut ratio
     :param hessian_inverse_path:
     :param layer:
-    :param cut_ratio: The zeros percentage of weights and biases, or, 1 - compression ratio
+    :param value: The zeros percentage of weights and biases, or, 1 - compression ratio
+    :param strategy:
     :return:
     """
-    cut_ratio = cut_ratio / 100  # transfer percentage from full value to floating point
-
     # dataset_size = layer2_input_train.shape[0]
     w_layer = layer.get_weight().data.numpy().T
 
@@ -77,9 +90,15 @@ def edge_cut(layer, hessian_inverse_path, cut_ratio):
     # gate_b = np.ones([n_hidden_2])
 
     # calculate number of pruneable elements
-    max_pruned_num = math.floor(layer.get_weight_count() * cut_ratio)
+    if strategy is PruningStrategy.PERCENTAGE:
+        cut_ratio = value / 100  # transfer percentage from full value to floating point
+        max_pruned_num = math.floor(layer.get_weight_count() * cut_ratio)
+    elif strategy is PruningStrategy.BUCKET:
+        max_pruned_num = value
+    else:
+        raise ValueError('Currently not implemented')
 
-    # Calcuate sensitivity score. Refer to Eq.5.
+    # Calculate sensitivity score. Refer to Eq.5.
     for i in range(n_hidden_2):
         sensitivity = np.hstack(
             (sensitivity, 0.5 * ((w_layer.T[i] ** 2) / np.diag(hessian_inverse))))
@@ -95,7 +114,12 @@ def edge_cut(layer, hessian_inverse_path, cut_ratio):
         if gate_w[y_index][x_index] == 1:
             delta_w = (-w_layer[y_index][x_index] / hessian_inverse[y_index][y_index]) * hessian_inverseT[y_index]
             gate_w[y_index][x_index] = 0
-            prune_count += 1
+
+            if strategy is strategy.PERCENTAGE:
+                prune_count += 1
+            elif strategy is strategy.BUCKET:
+                prune_count += sensitivity[prune_index]  # todo: evaluate here probably a bit wrong :(
+
             # Parameters update, refer to Eq.5
             w_layer.T[x_index] = w_layer.T[x_index] + delta_w
             # b_layer[x_index] = b_layer[x_index] + delta_w[-1]
@@ -120,7 +144,7 @@ def edge_cut(layer, hessian_inverse_path, cut_ratio):
 #
 # My own utility methods start here
 #
-def prune_network_by_saliency(network, value, percentage=True):
+def prune_network_by_saliency(network, value, strategy=PruningStrategy.PERCENTAGE):
     """
     Prune the number of percentage weights from the network. The elements are pruned according to the saliency that is
     set in the network. By default the saliency is the actual weight of the connections. The number of elements are
@@ -130,10 +154,10 @@ def prune_network_by_saliency(network, value, percentage=True):
 
     :param network:     The layers of the network.
     :param value:       The number/percentage of elements that should be pruned.
-    :param percentage:  If percentage pruning or number of elements pruning is used.
+    :param strategy:  If percentage pruning or number of elements pruning is used.
     """
     # calculate the network's threshold
-    th = find_network_threshold(network, value, percentage=percentage)
+    th = find_network_threshold(network, value, strategy=strategy)
 
     # set the mask
     for layer in get_single_pruning_layer(network):
@@ -142,7 +166,7 @@ def prune_network_by_saliency(network, value, percentage=True):
         layer.set_mask(torch.ge(layer.get_saliency(), th).float() * layer.get_mask())
 
 
-def prune_layer_by_saliency(network, value, percentage=True):
+def prune_layer_by_saliency(network, value, strategy=PruningStrategy.PERCENTAGE):
     pre_pruned_weight_count = get_network_weight_count(network).item()
 
     for layer in get_single_pruning_layer(network):
@@ -152,9 +176,11 @@ def prune_layer_by_saliency(network, value, percentage=True):
             *((masked_val, weight_val) for masked_val, weight_val in zip(mask, saliency) if masked_val == 1))
 
         # calculate threshold
-        if percentage:
+        # percentage pruning
+        if strategy is PruningStrategy.PERCENTAGE:
             th = np.percentile(np.array(filtered_saliency), value)
-        else:
+        # absolute pruning
+        elif strategy is PruningStrategy.ABSOLUTE:
             # due to floating point operations this is not 100 percent exact a few more or less weights might get
             # deleted
             add_val = round((layer.get_weight_count() / pre_pruned_weight_count * value).item())
@@ -165,11 +191,14 @@ def prune_layer_by_saliency(network, value, percentage=True):
             else:
                 index = np.argsort(np.array(filtered_saliency))[add_val]
                 th = np.array(filtered_saliency)[index].item()
+        else:
+            raise ValueError('Action is not supported!!!')
+
         # set mask
         layer.set_mask(torch.ge(layer.get_saliency(), th).float() * layer.get_mask())
 
 
-def find_network_threshold(network, value, percentage=True):
+def find_network_threshold(network, value, strategy):
     all_sal = []
     for layer in get_single_pruning_layer(network):
         # flatten both weights and mask
@@ -183,16 +212,29 @@ def find_network_threshold(network, value, percentage=True):
         all_sal += filtered_saliency
 
     # calculate percentile
-    if percentage:
+    if strategy is PruningStrategy.PERCENTAGE:
         return np.percentile(np.array(all_sal), value)
-    else:
+    elif strategy is PruningStrategy.ABSOLUTE:
         # check if there are enough elements to prune
-        if value > len(all_sal):
+        if value >= len(all_sal):
             return np.argmax(np.array(all_sal)).item() + 1
         else:
             # determine threshold
             index = np.argsort(np.array(all_sal))[value]
             return np.array(all_sal)[index].item()
+    elif strategy is PruningStrategy.BUCKET:
+        sorted_array = np.sort(all_sal)
+        sum_array = 0
+
+        # sum up the elements from the sorted array
+        for i in sorted_array:
+            sum_array += i
+            if sum_array > value:
+                # return the last element that has been added to the array
+                return i
+
+        # return last element if bucket not reached
+        return sorted_array[-1] + 1
 
 
 def calculate_obd_saliency(self, network):
@@ -228,6 +270,40 @@ def calculate_obd_saliency(self, network):
         # rearrange calculated value to their normal form and set saliency
         layer.set_saliency(
             torch.tensor(all_grads).view(weight.size()) * layer.get_weight().data.pow(2) * 0.5)
+
+
+def calculate_obsl_saliency(self, network):
+    out_dir = './out/hessian'
+    if not os.path.exists(out_dir):
+        os.mkdir(out_dir)
+        os.mkdir(out_dir + '/layerinput')
+        os.mkdir(out_dir + '/inverse')
+
+    # where to put the cached layer inputs
+    layer_input_path = out_dir + '/layerinput/'
+    # where to save the hessian matricies
+    hessian_inverse_path = out_dir + '/inverse/'
+
+    # generate the input in the layers and save it for every batch
+    keep_input_layerwise(network)
+
+    for i, (images, labels) in enumerate(self.valid_dataset):
+        images = images.reshape(-1, 28 * 28)
+        network(images)
+        for name, layer in get_single_pruning_layer_with_name(network):
+            layer_input = layer.layer_input.data.numpy()
+            path = layer_input_path + name + '/'
+            if not os.path.exists(path):
+                os.mkdir(path)
+
+            np.save(path + 'layerinput-' + str(i), layer_input)
+
+    # generate the hessian matrix for each layer
+    for name, layer in get_single_pruning_layer_with_name(network):
+        hessian_inverse_location = hessian_inverse_path + name
+        generate_hessian_inverse_fc(layer, hessian_inverse_location, layer_input_path + name)
+
+    return hessian_inverse_path
 
 
 def set_random_saliency(network):

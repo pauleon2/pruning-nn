@@ -107,38 +107,17 @@ def optimal_brain_surgeon_layer_wise(self, network, percentage):
     :param percentage:  What percentage of the weights should be pruned.
     :param self:        The strategy pattern object the method is attached to.
     """
-    out_dir = './out/hessian'
-    if not os.path.exists(out_dir):
-        os.mkdir(out_dir)
-        os.mkdir(out_dir + '/layerinput')
-        os.mkdir(out_dir + '/inverse')
+    hessian_inverse_path = calculate_obsl_saliency(self, network)
 
-    # where to put the cached layer inputs
-    layer_input_path = out_dir + '/layerinput/'
-    # where to save the hessian matricies
-    hessian_inverse_path = out_dir + '/inverse/'
-
-    # generate the input in the layers and save it for every batch
-    keep_input_layerwise(network)
-
-    for i, (images, labels) in enumerate(self.valid_dataset):
-        images = images.reshape(-1, 28 * 28)
-        network(images)
-        for name, layer in get_single_pruning_layer_with_name(network):
-            layer_input = layer.layer_input.data.numpy()
-            path = layer_input_path + name + '/'
-            if not os.path.exists(path):
-                os.mkdir(path)
-
-            np.save(path + 'layerinput-' + str(i), layer_input)
-
-    # generate the hessian matrix for each layer
-    for name, layer in get_single_pruning_layer_with_name(network):
-        hessian_inverse_location = hessian_inverse_path + name
-        generate_hessian_inverse_fc(layer, hessian_inverse_location, layer_input_path + name)
     # prune the elements from the matrix
     for name, layer in get_single_pruning_layer_with_name(network):
-        edge_cut(layer, hessian_inverse_path + name + '.npy', percentage)
+        edge_cut(layer, hessian_inverse_path + name + '.npy', value=percentage)
+
+
+def optimal_brain_surgeon_layer_wise_bucket(self, network, bucket_size):
+    hessian_inverse_path = calculate_obsl_saliency(self, network)
+    for name, layer in get_single_pruning_layer_with_name(network):
+        edge_cut(layer, hessian_inverse_path + name + '.npy', value=bucket_size, strategy=PruningStrategy.BUCKET)
 
 
 #
@@ -152,7 +131,7 @@ def random_pruning(self, network, percentage):
 
 def random_pruning_absolute(self, network, number):
     set_random_saliency(network)
-    prune_network_by_saliency(network, number, percentage=False)
+    prune_network_by_saliency(network, number, strategy=PruningStrategy.ABSOLUTE)
 
 
 #
@@ -174,7 +153,7 @@ def magnitude_class_blinded(self, network, percentage):
 
 
 def magnitude_class_blinded_absolute(self, network, number):
-    prune_network_by_saliency(network, number, percentage=False)
+    prune_network_by_saliency(network, number, strategy=PruningStrategy.ABSOLUTE)
 
 
 def magnitude_class_uniform(self, network, percentage):
@@ -182,7 +161,7 @@ def magnitude_class_uniform(self, network, percentage):
 
 
 def magnitude_class_uniform_absolute(self, network, number):
-    prune_layer_by_saliency(network, number, percentage=False)
+    prune_layer_by_saliency(network, number, strategy=PruningStrategy.ABSOLUTE)
 
 
 def magnitude_class_distributed(self, network, percentage):
@@ -209,4 +188,4 @@ def magnitude_class_distributed(self, network, percentage):
 
 def magnitude_class_distributed_absolute(self, network, number):
     set_distributed_saliency(network)
-    prune_network_by_saliency(network, number, percentage=False)
+    prune_network_by_saliency(network, number, strategy=PruningStrategy.ABSOLUTE)
