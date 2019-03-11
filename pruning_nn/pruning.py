@@ -1,13 +1,11 @@
-import os
-import numpy as np
 from pruning_nn.util import *
 
 
-class PruneNeuralNetStrategy:
+class PruneNeuralNetMethod:
     """
-    Strategy pattern for the selection of the currently used pruning strategy.
-    Strategies can be set during creation of the strategy object.
-    Valid Strategies are:
+    Strategy pattern for the selection of the currently used pruning method.
+    Methods can be set during creation of the pruning method object.
+    Valid methods are:
 
     <ul>
         <li>Random Pruning</li>
@@ -32,15 +30,14 @@ class PruneNeuralNetStrategy:
     If no Strategy is specified random pruning will be used as a fallback.
     """
 
-    def __init__(self, strategy):
+    def __init__(self, method):
         """
-        Creates a new PruneNeuralNetStrategy object. There are a number of pruning strategies supported currently there
-        is random pruning only.
+        Creates a new PruneNeuralNetMethod object. There are a number of pruning methods supported.
 
-        :param strategy:    The selected strategy for pruning If no pruning strategy is provided random pruning will be
+        :param method:      The selected strategy for pruning If no pruning strategy is provided random pruning will be
                             selected as the standard pruning method.
         """
-        self.prune_strategy = strategy
+        self.prune_method = method
 
         # dataset and loss function for error calculation
         self.criterion = None
@@ -54,7 +51,7 @@ class PruneNeuralNetStrategy:
         :param network:     The network that should be pruned
         :param value:       The percentage of elements that should be pruned
         """
-        self.prune_strategy(self, network, value)
+        self.prune_method(self, network, value)
 
     def requires_loss(self):
         """
@@ -69,7 +66,7 @@ class PruneNeuralNetStrategy:
         Check if the current pruning strategy requires a retraining after the pruning is done
         :return: True iff the retraining is required.
         """
-        return self.prune_strategy not in [optimal_brain_surgeon_layer_wise]
+        return self.prune_method not in [optimal_brain_surgeon_layer_wise]
 
 
 #
@@ -80,7 +77,7 @@ def optimal_brain_damage(self, network, percentage):
     Implementation of the optimal brain damage algorithm.
     Requires the gradient to be set in the network.
 
-    :param self:        The strategy pattern object.
+    :param self:        The strategy pattern object for the pruning method.
     :param network:     The network where the calculations should be done.
     :param percentage:  The percentage of weights that should be pruned.
     """
@@ -92,7 +89,12 @@ def optimal_brain_damage(self, network, percentage):
 
 def optimal_brain_damage_absolute(self, network, number):
     calculate_obd_saliency(self, network)
-    prune_network_by_saliency(network, number, percentage=False)
+    prune_network_by_saliency(network, number, strategy=PruningStrategy.ABSOLUTE)
+
+
+def optimal_brain_damage_bucket(self, network, bucket_size):
+    calculate_obd_saliency(self, network)
+    prune_network_by_saliency(network, bucket_size, strategy=PruningStrategy.BUCKET)
 
 
 #
