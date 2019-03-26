@@ -147,8 +147,10 @@ def prune_network(pruning_method, pruning_rates=None, filename='model', runs=1, 
             # loss and optimizer for the loaded model
             optimizer = setup_training(model)
 
+            continue_pruning = True
+
             # prune as long as there are more than 500 elements in the network
-            while util.get_network_weight_count(model).item() > minimal_size:
+            while util.get_network_weight_count(model).item() > minimal_size and continue_pruning:
                 # start pruning
                 start = time.time()
                 method.prune(model, rate)
@@ -184,6 +186,11 @@ def prune_network(pruning_method, pruning_rates=None, filename='model', runs=1, 
                     retrain_epoch = 0
                     final_acc = learning.test(test_set, model)
                     retrain_change = 0
+
+                # stop pruning if one layer doesn't have any more weights
+                for layer in pruning.get_single_pruning_layer(model):
+                    if layer.get_weight_count() == 0:
+                        continue_pruning = False
 
                 # Save the best models with the following criterion
                 # 1. smallest weight count with max 1% accuracy drop from the original model.
