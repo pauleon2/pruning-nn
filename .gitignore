@@ -111,6 +111,7 @@ venv.bak/
 # my work
 dataset/
 out/
-results/
+results/*/
 playground.ipynb
+results.ipynb
 *.png
