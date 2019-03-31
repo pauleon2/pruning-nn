@@ -241,11 +241,6 @@ def calculate_obd_saliency(self, network):
     # the loss of the network on the cross validation set
     loss = cross_validation_error(self.valid_dataset, network, self.criterion)
 
-    # Use GPU optimization if available
-    if torch.cuda.is_available():
-        network.cuda()
-        loss.cuda()
-
     # calculate the first order gradients for all weights from the pruning layers.
     weight_params = map(lambda x: x.get_weight(), get_single_pruning_layer(network))
     loss_grads = grad(loss, weight_params, create_graph=True)
@@ -256,8 +251,14 @@ def calculate_obd_saliency(self, network):
         mask = layer.get_mask().view(-1)
         weight = layer.get_weight()
 
+        if torch.cuda.is_available():
+            weight.cuda()
+
         # zip gradient and mask of the network in a lineared fashion
         for num, (g, m) in enumerate(zip(grd.view(-1), mask)):
+            if torch.cuda.is_available():
+                g.cuda()
+
             if m.item() == 0:
                 # if the element is pruned i.e. if mask == 0 then the second order derivative should e zero as well
                 # so no computations are needed

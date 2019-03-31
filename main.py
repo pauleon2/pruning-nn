@@ -222,8 +222,8 @@ def prune_network(pruning_method, pruning_rates=None, filename='model', runs=1, 
                                     })
                 s = s.append(tmp, ignore_index=True, sort=True)
 
-        # save data frame
-        s.to_pickle(out_name + '.pkl')
+            # save data frame
+            s.to_pickle(out_name + '.pkl')
 
 
 def train_models(num=10):
