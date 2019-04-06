@@ -58,15 +58,17 @@ class PruneNeuralNetMethod:
         Check if the current pruning method needs the network's loss as an argument.
         :return: True iff a gradient of the network is required.
         """
-        return self.prune_method in [optimal_brain_damage, optimal_brain_damage_absolute,
-                                     optimal_brain_surgeon_layer_wise]
+        return self.prune_method in [optimal_brain_damage, optimal_brain_damage_absolute, optimal_brain_damage_bucket,
+                                     optimal_brain_surgeon_layer_wise, optimal_brain_surgeon_layer_wise_bucket]
 
     def require_retraining(self):
         """
         Check if the current pruning strategy requires a retraining after the pruning is done
         :return: True iff the retraining is required.
         """
-        return self.prune_method not in [optimal_brain_surgeon_layer_wise]
+        # todo: does obs-l need retraining?
+        # return self.prune_method not in [optimal_brain_surgeon_layer_wise, optimal_brain_surgeon_layer_wise_bucket]
+        return True
 
 
 #
