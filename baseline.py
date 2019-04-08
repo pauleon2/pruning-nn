@@ -4,6 +4,9 @@ import pandas as pd
 
 from util import *
 
+result_folder = './out/result/'
+model_folder = './out/model/'
+
 
 class NeuralNetwork(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes):
@@ -124,6 +127,35 @@ def dropout():
         s.to_pickle('./out/result/dropout.pkl')
 
 
+def train_sparse_model(filename='model', save=False):
+    train_set, valid_set = dataloader.get_train_valid_dataset()
+    test_set = dataloader.get_test_dataset()
+
+    model = torch.load(result_folder + filename + '.pt')
+    pruned_acc = learning.test(test_set, model)
+    lr = 0.01
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.0)
+    loss_func = nn.CrossEntropyLoss()
+
+    s = pd.DataFrame(columns=['epoch', 'test_acc'])
+    s = s.append({'epoch': -1, 'test_acc': pruned_acc}, ignore_index=True)
+
+    for epoch in range(200):
+        learning.train(train_set, model, optimizer, loss_func)
+        tr = learning.test(test_set, model)
+        s = s.append({'epoch': epoch, 'test_acc': tr}, ignore_index=True)
+
+    s.to_pickle(result_folder + filename + '-scratch.pkl')
+    if save:
+        torch.save(model, result_folder + filename + '-scratch.pt')
+
+
+def fine_tune_model(filename='model'):
+    pass
+
+
 if __name__ == '__main__':
     wd()
     dropout()
+    fine_tune_model('model')
+    train_sparse_model('reset-model')
