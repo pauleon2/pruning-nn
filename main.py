@@ -58,7 +58,7 @@ def train_network(filename='model'):
         learning.train(train_set, model, optimizer, loss_func)
         new_acc = learning.test(valid_set, model)
 
-        if new_acc - prev_acc < 0.001:
+        if new_acc - prev_acc < 0.00001:
             if lr > 0.0001:
                 # adjust learning rate
                 lr = lr * 0.1
@@ -87,7 +87,7 @@ def train_sparse_model(filename='model', save=False):
         tr = learning.test(test_set, model)
         s = s.append({'epoch': epoch, 'test_acc': tr}, ignore_index=True)
 
-    s.to_pickle(result_folder + filename + '-scatch.pkl')
+    s.to_pickle(result_folder + filename + '-scratch.pkl')
     if save:
         torch.save(model, result_folder + filename + '-scratch.pt')
 
@@ -231,40 +231,63 @@ def train_models(num=10):
         train_network('model' + str(i))
 
 
+def reevaluate_models(folder):
+    s = pd.DataFrame(columns=['run', 'accuracy', 'pruning_perc', 'number_of_weights', 'pruning_method', 'time',
+                              'retrain_change', 'retrain_epochs'])
+    for idx, file in enumerate(os.listdir(folder)):
+        model = torch.load(folder + file)
+
+        ac = learning.test(test_set, model)
+        tmp = pd.DataFrame({'run': [0],
+                            'accuracy': [ac],
+                            'pruning_perc': [0],
+                            'number_of_weights': [util.get_network_weight_count(model).item()],
+                            'pruning_method': ['original'],
+                            'time': [0],
+                            'retrain_change': [0],
+                            'retrain_epochs': [0]
+                            })
+        s = s.append(tmp, ignore_index=True, sort=True)
+    s.to_pickle(folder + 'models.pkl')
+
+
 def experiment1():
-    for j in range(4):
+    # for j in range(4):
+    for j in ['x']:
         model = 'model' + str(j)
         s_m = (j == 0)  # save models from the first model only which is the highest performing one...
+        s_m = True
 
         for meth in [pruning.random_pruning, pruning.magnitude_class_distributed, pruning.magnitude_class_uniform,
                      pruning.magnitude_class_blinded]:
             prune_network(meth, filename=model, runs=25, save=s_m)
 
-    prune_network(pruning.optimal_brain_damage, filename='model0', runs=25, save=True)
+    prune_network(pruning.optimal_brain_damage, pruning_rates=[70, 60, 50], filename='modelx', runs=25, save=True)
 
 
 def experiment2():
     for meth in [pruning.random_pruning, pruning.magnitude_class_distributed, pruning.magnitude_class_uniform,
-                 pruning.magnitude_class_blinded, pruning.optimal_brain_damage]:
+                 pruning.magnitude_class_blinded]:
         # variable retraining
         hyper_params['num_retrain_epochs'] = 10
-        prune_network(meth, pruning_rates=[50], filename='model', runs=25, variable_retraining=True,
+        prune_network(meth, pruning_rates=[25, 75], filename='model', runs=25, variable_retraining=True,
                       save=True)
 
         # non-variable retraining
         hyper_params['num_retrain_epochs'] = 2
-        prune_network(meth, pruning_rates=[50], filename='model', runs=25, variable_retraining=False,
+        prune_network(meth, pruning_rates=[25, 75], filename='model', runs=25, variable_retraining=False,
                       save=True)
 
 
 def experiment3():
     # will use either fixed or variable retraining depending on the results from experiment one and two
     # 25 runs, 1 model
-    for meth in [pruning.random_pruning_absolute, pruning.magnitude_class_uniform_absolute,
-                 pruning.magnitude_class_distributed_absolute, pruning.magnitude_class_blinded_absolute,
-                 pruning.optimal_brain_damage_absolute]:
-        # wait: check if we should use variable or fixed retraining
-        prune_network(meth, pruning_rates=[1000, 5000, 10000], runs=25, save=True)
+    # for meth in [pruning.random_pruning_absolute, pruning.magnitude_class_uniform_absolute,
+    #             pruning.magnitude_class_distributed_absolute, pruning.magnitude_class_blinded_absolute]:
+    #    # wait: check if we should use variable or fixed retraining
+    #    prune_network(meth, pruning_rates=[1000, 5000, 10000], runs=25, save=True)
+
+    prune_network(pruning.optimal_brain_damage_absolute, pruning_rates=[5000], runs=25, save=True)
 
 
 def experiment4():
