@@ -305,4 +305,16 @@ def experiment4():
 if __name__ == '__main__':
     # setup environment
     setup()
+    # run the experiments
+    experiment1()
+    experiment2()
+    experiment3()
     experiment4()
+    experiment5()
+
+    # save the original accuracy of the models
+    reevaluate_models('./results/experiment1/original_model/')
+    reevaluate_models('./results/experiment2/original_model/')
+    reevaluate_models('./results/experiment3/original_model/')
+    reevaluate_models('./results/experiment4/original_model/')
+    reevaluate_models('./results/experiment5/original_model/')
