@@ -110,7 +110,6 @@ def train_network(model, weight_decay=0.0):
     while t and epoch < 200:
         learning.train(train_set, model, optimizer, loss_func)
         new_acc = learning.test(valid_set, model)
-        print(epoch, new_acc)
 
         if new_acc - p_acc < 0.00001:
             if lr > 0.0001:
@@ -132,5 +131,5 @@ if __name__ == '__main__':
     dropout()
 
     name = 'model-f'
-    fine_tune_model(filename=name)
-    train_sparse_model(filename=name)
+    # fine_tune_model(filename=name)
+    # train_sparse_model(filename=name)
