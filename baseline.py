@@ -3,6 +3,7 @@ import torch.nn as nn
 import pandas as pd
 
 from util import *
+from pruning_nn import *
 
 result_folder = './out/result/'
 model_folder = './out/model/'
@@ -38,41 +39,12 @@ class DropoutNeuralNetwork(nn.Module):
 
 
 def wd():
-    train_set, valid_set = dataloader.get_train_valid_dataset()
-    test_set = dataloader.get_test_dataset()
-
     s = pd.DataFrame(columns=['accuracy', 'weight decay', 'run'])
 
     for i in range(25):
-        for wd in [0.05, 0.01, 0.005, 0.001]:
+        for w in [0.005, 0.0025, 0.001]:
             model = NeuralNetwork(28 * 28, 100, 10)
-            lr = 0.01
-            optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.0, weight_decay=wd)
-            loss_func = nn.CrossEntropyLoss()
-
-            # train and test the network
-            t = True
-            epoch = 0
-            p_acc = 0
-
-            while t and epoch < 200:
-                learning.train(train_set, model, optimizer, loss_func)
-                new_acc = learning.test(valid_set, model)
-
-                if new_acc - p_acc < 0.00001:
-                    if lr > 0.0001:
-                        # adjust learning rate
-                        lr = lr * 0.1
-                        optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.0, weight_decay=wd)
-                    else:
-                        # stop training
-                        t = False
-                        break
-
-                epoch += 1
-                p_acc = new_acc
-
-            acc = learning.test(test_set, model)
+            acc = train_network(model, weight_decay=w)
             tmp = pd.DataFrame({
                 'accuracy': [acc],
                 'weight decay': [wd],
@@ -83,41 +55,14 @@ def wd():
 
 
 def dropout():
-    train_set, valid_set = dataloader.get_train_valid_dataset()
-    test_set = dataloader.get_test_dataset()
-
     s = pd.DataFrame(columns=['accuracy', 'dropout', 'run'])
 
     for i in range(25):
         for drop_ratio in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]:
             model = DropoutNeuralNetwork(28*28, 100, 10, drop_ratio)
 
-            lr = 0.01
-            optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.0)
-            loss_func = nn.CrossEntropyLoss()
-            # train and test the network
-            t = True
-            epoch = 0
-            p_acc = 0
+            acc = train_network(model)
 
-            while t and epoch < 200:
-                learning.train(train_set, model, optimizer, loss_func)
-                new_acc = learning.test(valid_set, model)
-
-                if new_acc - p_acc < 0.00001:
-                    if lr > 0.0001:
-                        # adjust learning rate
-                        lr = lr * 0.1
-                        optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.0, weight_decay=wd)
-                    else:
-                        # stop training
-                        t = False
-                        break
-
-                epoch += 1
-                p_acc = new_acc
-
-            acc = learning.test(test_set, model)
             tmp = pd.DataFrame({
                 'accuracy': [acc],
                 'dropout ratio': [wd],
@@ -127,35 +72,65 @@ def dropout():
         s.to_pickle('./out/result/dropout.pkl')
 
 
-def train_sparse_model(filename='model', save=False):
-    train_set, valid_set = dataloader.get_train_valid_dataset()
-    test_set = dataloader.get_test_dataset()
-
-    model = torch.load(result_folder + filename + '.pt')
-    pruned_acc = learning.test(test_set, model)
-    lr = 0.01
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.0)
-    loss_func = nn.CrossEntropyLoss()
-
-    s = pd.DataFrame(columns=['epoch', 'test_acc'])
-    s = s.append({'epoch': -1, 'test_acc': pruned_acc}, ignore_index=True)
-
-    for epoch in range(200):
-        learning.train(train_set, model, optimizer, loss_func)
-        tr = learning.test(test_set, model)
-        s = s.append({'epoch': epoch, 'test_acc': tr}, ignore_index=True)
+def train_sparse_model(filename='model'):
+    s = pd.DataFrame(columns=['run', 'test_acc'])
+    for i in range(25):
+        model = torch.load(result_folder + filename + '.pt')
+        util.reset_pruned_network(model)
+        acc = train_network(model)
+        s = s.append({'run': [i], 'test_acc': [acc]}, ignore_index=True)
 
     s.to_pickle(result_folder + filename + '-scratch.pkl')
-    if save:
-        torch.save(model, result_folder + filename + '-scratch.pt')
 
 
 def fine_tune_model(filename='model'):
-    pass
+    s = pd.DataFrame(columns=['run', 'test_acc'])
+    for i in range(25):
+        model = torch.load(result_folder + filename + '.pt')
+        acc = train_network(model)
+        s = s.append({'run': [i], 'test_acc': [acc]}, ignore_index=True)
+
+    s.to_pickle(result_folder + filename + '-finetuned.pkl')
+
+
+def train_network(model, weight_decay=0.0):
+    train_set, valid_set = dataloader.get_train_valid_dataset()
+    test_set = dataloader.get_test_dataset()
+
+    # train and test the network
+    lr = 0.01
+    mom = 0.5
+    t = True
+    epoch = 0
+    p_acc = 0
+
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=mom, weight_decay=weight_decay)
+    loss_func = nn.CrossEntropyLoss()
+
+    while t and epoch < 200:
+        learning.train(train_set, model, optimizer, loss_func)
+        new_acc = learning.test(valid_set, model)
+        print(epoch, new_acc)
+
+        if new_acc - p_acc < 0.00001:
+            if lr > 0.0001:
+                # adjust learning rate
+                lr = lr * 0.1
+                optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=mom, weight_decay=weight_decay)
+            else:
+                # stop training
+                break
+
+        epoch += 1
+        p_acc = new_acc
+
+    return learning.test(test_set, model)
 
 
 if __name__ == '__main__':
     wd()
     dropout()
-    fine_tune_model('model')
-    train_sparse_model('reset-model')
+
+    name = 'model-f'
+    fine_tune_model(filename=name)
+    train_sparse_model(filename=name)
