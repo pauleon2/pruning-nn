@@ -14,9 +14,6 @@ hyper_params = {
     'learning_rate': 0.01,
     'momentum': 0
 }
-
-# experiment for 10, 15 and 25 percent of the weights each step.
-
 result_folder = './out/result/'
 model_folder = './out/model/'
 
@@ -72,24 +69,6 @@ def train_network(filename='model'):
 
     # save the current model
     torch.save(model, model_folder + filename + '.pt')
-
-
-def train_sparse_model(filename='model', save=False):
-    model = torch.load(result_folder + filename + '.pt')
-    pruned_acc = learning.test(test_set, model)
-    optimizer = setup_training(model)
-
-    s = pd.DataFrame(columns=['epoch', 'test_acc'])
-    s = s.append({'epoch': -1, 'test_acc': pruned_acc}, ignore_index=True)
-
-    for epoch in range(hyper_params['num_epochs']):
-        learning.train(train_set, model, optimizer, loss_func)
-        tr = learning.test(test_set, model)
-        s = s.append({'epoch': epoch, 'test_acc': tr}, ignore_index=True)
-
-    s.to_pickle(result_folder + filename + '-scratch.pkl')
-    if save:
-        torch.save(model, result_folder + filename + '-scratch.pt')
 
 
 def prune_network(pruning_method, pruning_rates=None, filename='model', runs=1, variable_retraining=False, save=False,
