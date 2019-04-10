@@ -35,6 +35,6 @@ single pruning
 
 ### Experiment 5
 
-### Experiment 6 (needs implementation)
+use of a bigger model compared to the other ones which all used an arcitecure 784 - 100-10 we use now 784-300-100-10 what increases the total weight count singificantly.
 
 ### Baseline Experiment (needs evaluation)
