@@ -35,19 +35,19 @@ class DropoutNeuralNetwork(nn.Module):
         out = self.relu(out)
         out = self.dropout(out)
         out = self.fc2(out)
-        return self.dropout(out)
+        return out
 
 
 def wd():
-    s = pd.DataFrame(columns=['accuracy', 'weight decay', 'run'])
+    s = pd.DataFrame(columns=['accuracy', 'weight_decay', 'run'])
 
-    for i in range(25):
-        for w in [0.005, 0.0025, 0.001]:
+    for i in range(10):
+        for w in [0.05, 0.005, 0.0005, 0.00008]:
             model = NeuralNetwork(28 * 28, 100, 10)
             acc = train_network(model, weight_decay=w)
             tmp = pd.DataFrame({
                 'accuracy': [acc],
-                'weight decay': [wd],
+                'weight_decay': [w],
                 'run': [i]
             })
             s = s.append(tmp, ignore_index=True)
@@ -55,17 +55,17 @@ def wd():
 
 
 def dropout():
-    s = pd.DataFrame(columns=['accuracy', 'dropout', 'run'])
+    s = pd.DataFrame(columns=['accuracy', 'dropout_ratio', 'run'])
 
-    for i in range(25):
-        for drop_ratio in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]:
+    for i in range(10):
+        for drop_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
             model = DropoutNeuralNetwork(28*28, 100, 10, drop_ratio)
 
             acc = train_network(model)
-
+            model.eval()
             tmp = pd.DataFrame({
                 'accuracy': [acc],
-                'dropout ratio': [wd],
+                'dropout_ratio': [drop_ratio],
                 'run': [i]
             })
             s = s.append(tmp, ignore_index=True)
@@ -74,8 +74,8 @@ def dropout():
 
 def train_sparse_model(filename='model'):
     s = pd.DataFrame(columns=['run', 'test_acc'])
-    for i in range(25):
-        model = torch.load(result_folder + filename + '.pt')
+    for i in range(10):
+        model = torch.load(model_folder + filename + '.pt')
         util.reset_pruned_network(model)
         acc = train_network(model)
         s = s.append({'run': [i], 'test_acc': [acc]}, ignore_index=True)
@@ -85,8 +85,8 @@ def train_sparse_model(filename='model'):
 
 def fine_tune_model(filename='model'):
     s = pd.DataFrame(columns=['run', 'test_acc'])
-    for i in range(25):
-        model = torch.load(result_folder + filename + '.pt')
+    for i in range(10):
+        model = torch.load(model_folder + filename + '.pt')
         acc = train_network(model)
         s = s.append({'run': [i], 'test_acc': [acc]}, ignore_index=True)
 
@@ -99,7 +99,7 @@ def train_network(model, weight_decay=0.0):
 
     # train and test the network
     lr = 0.01
-    mom = 0.5
+    mom = 0.0
     t = True
     epoch = 0
     p_acc = 0
@@ -108,10 +108,12 @@ def train_network(model, weight_decay=0.0):
     loss_func = nn.CrossEntropyLoss()
 
     while t and epoch < 200:
+        model.train()
         learning.train(train_set, model, optimizer, loss_func)
+        model.eval()
         new_acc = learning.test(valid_set, model)
 
-        if new_acc - p_acc < 0.00001:
+        if new_acc - p_acc < 0.001:
             if lr > 0.0001:
                 # adjust learning rate
                 lr = lr * 0.1
@@ -123,6 +125,7 @@ def train_network(model, weight_decay=0.0):
         epoch += 1
         p_acc = new_acc
 
+    model.eval()
     return learning.test(test_set, model)
 
 
@@ -131,5 +134,5 @@ if __name__ == '__main__':
     dropout()
 
     name = 'model-f'
-    # fine_tune_model(filename=name)
-    # train_sparse_model(filename=name)
+    fine_tune_model(filename=name)
+    train_sparse_model(filename=name)

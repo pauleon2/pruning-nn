@@ -25,11 +25,11 @@ Info: Experiment 2, 3 and 4 share the same underlying model again 28x28 - 100 - 
 \
 50 percent iterative pruning
 
-### Experiment 3 (needs extension)
+### Experiment 3 
 
 fixed number pruning: 10000, 5000, 1000
 
-### Experiment 4 (needs extension)
+### Experiment 4
 
 single pruning
 
@@ -37,4 +37,7 @@ single pruning
 
 use of a bigger model compared to the other ones which all used an arcitecure 784 - 100-10 we use now 784-300-100-10 what increases the total weight count singificantly.
 
-### Baseline Experiment (needs evaluation)
+### Baseline Experiment
+This includes 4 files: dropout.pkl, weight-decay.pkl, model-f-finetuned.pkl and model-f-scratched.pkl
+
+Experiments to comapare the pruning results with other regularization techniuqes as well as a model trained from scratch and a fine-tuned model.
