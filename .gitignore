@@ -112,7 +112,7 @@ venv.bak/
 dataset/
 out/
 results/*/
-graphs.py
+util/graphs.py
 playground.ipynb
 results.ipynb
 *.png
