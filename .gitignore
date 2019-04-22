@@ -115,4 +115,3 @@ results/*/
 util/graphs.py
 playground.ipynb
 results.ipynb
-*.png
