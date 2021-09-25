@@ -1,6 +1,6 @@
 # pruning-nn
 
-Code and results for my bachelor thesis about Pruning of Fully-connected feed-forward Neural Networks (FFN) using pyTorch
+Code for my bachelor thesis about Pruning of Fully-connected feed-forward Neural Networks (FFN) using pyTorch
 
 ----------
 
@@ -8,7 +8,9 @@ Code and results for my bachelor thesis about Pruning of Fully-connected feed-fo
 
 Submitted: April 2019
 
-Institute: Chair of Data Science, University of 
+Institute: Chair of Data Science, University of Passau
+
+[Download](https://github.com/pauleon2/pruning-nn/raw/master/thesis.pdf) the thesis as full text
 
 ----------
 
